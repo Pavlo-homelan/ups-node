@@ -188,6 +188,9 @@ JavaScript обновляет элементы по `data-live`:
 - `percent`: заряд батареи;
 - `voltage`: напряжение;
 - `current`: ток;
+- `output-voltage`: напряжение выхода 19 В с INA3221 Channel 2;
+- `output-current`: ток выхода 19 В с INA3221 Channel 2;
+- `output-power`: мощность выхода 19 В;
 - `cpu`: температура CPU;
 - `ram`: использование RAM.
 

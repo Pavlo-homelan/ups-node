@@ -15,6 +15,7 @@ Depends: ${misc:Depends},
          python3-libgpiod,
          python3-smbus2,
          python3-luma.lcd,
+         fonts-ubuntu,
          nginx,
          network-manager,
          python3-pam

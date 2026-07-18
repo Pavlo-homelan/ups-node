@@ -30,10 +30,22 @@ ups.voltage.v
 ups.current.ma
 ups.current.abs_ma
 ups.power.w
+ups.output.voltage_v
+ups.output.current_ma
+ups.output.power_w
 system.cpu.temp_c
 system.ram.used_mb
 system.ram.percent
 ```
+
+The `ups.voltage.v`, `ups.current.ma`, and `ups.power.w` values describe the
+battery path on INA3221 channel 1. The `ups.output.*` values describe the 19 V
+path on channel 2. Both channels use identical FL-2C `20 A / 75 mV` shunts on
+the verified node. Positive output current means current flows from the 19 V
+source to the load.
+
+See [hardware-validation-2026-07-18.md](hardware-validation-2026-07-18.md) for
+the validated channel map and example live readings.
 
 ## Access Token
 

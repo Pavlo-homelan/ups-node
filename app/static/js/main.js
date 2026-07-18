@@ -105,6 +105,8 @@ async function updateData() {
         const elements = {
             'val-v': Number(data.v).toFixed(2) + 'V',
             'val-i': Number(data.i).toFixed(0) + 'mA',
+            'val-output-v': Number(data.output_v).toFixed(2) + 'V',
+            'val-output-i': Number(data.output_i).toFixed(0) + 'mA',
             'ac-status': data.ac ? t('ups.ac_ok', 'AC OK') : t('ups.ac_lost', 'AC LOST'),
             'cpu-temp': Number(data.cpu_temp).toFixed(1),
             'ram-info': `${Number(data.ram_used).toFixed(1)}MB (${Number(data.ram_percent).toFixed(1)}%)`
@@ -117,6 +119,9 @@ async function updateData() {
             percent: data.percent + '%',
             voltage: Number(data.v).toFixed(2) + 'V',
             current: Number(data.i).toFixed(0) + 'mA',
+            'output-voltage': Number(data.output_v).toFixed(2) + 'V',
+            'output-current': Number(data.output_i).toFixed(0) + 'mA',
+            'output-power': Number(data.output_w).toFixed(2) + 'W',
             cpu: Number(data.cpu_temp).toFixed(1),
             'cpu-full': `${Number(data.cpu_temp).toFixed(1)}°C`,
             ram: `${Number(data.ram_used).toFixed(1)}MB (${Number(data.ram_percent).toFixed(1)}%)`,
@@ -126,6 +131,8 @@ async function updateData() {
             'overview-mains': data.ac ? t('ups.mains.online', '220 V online') : t('ups.mains.lost', '220 V lost'),
             'overview-mode': data.ac ? t('ups.mode.line', 'Line mode') : t('ups.mode.backup', 'Battery backup'),
             'overview-power': data.power_label || '',
+            'overview-output-current': data.output_current_label || `${Number(data.output_i).toFixed(0)}mA`,
+            'overview-output-power': data.output_power_label || `${Number(data.output_w).toFixed(2)}W`,
             'overview-route': data.ac ? t('ups.route.charger', 'Battery to charger') : t('ups.route.load', 'Battery to load'),
             'overview-summary': overviewSummary(data),
             'wifi-ssid': data.connected_ssid_label || '',

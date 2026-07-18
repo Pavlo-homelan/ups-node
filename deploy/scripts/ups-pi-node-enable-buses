@@ -66,7 +66,7 @@ write_modules_load() {
     modules_file="/etc/modules-load.d/ups-pi-node.conf"
     mkdir -p /etc/modules-load.d || return 0
     {
-        printf '# Loaded by ups-pi-node for INA219 and ST7735 hardware access\n'
+        printf '# Loaded by ups-pi-node for INA3221 and ST7735 hardware access\n'
         printf 'i2c-dev\n'
         printf 'i2c-bcm2835\n'
         printf 'spi-bcm2835\n'

@@ -49,7 +49,35 @@ case "$1" in
                 -e 's/^\([[:space:]]*relay_2_pin[[:space:]]*=[[:space:]]*\)24[[:space:]]*$/\122/' \
                 -e 's/^\([[:space:]]*battery_empty_voltage[[:space:]]*=[[:space:]]*\)10\.8[[:space:]]*$/\19.3/' \
                 -e 's/^\([[:space:]]*hotspot_ssid[[:space:]]*=[[:space:]]*\)ups-pi-node-setup[[:space:]]*$/\1Ups-Node/' \
+                -e 's/^\([[:space:]]*backend[[:space:]]*=[[:space:]]*\)ina219[[:space:]]*$/\1ina3221/' \
+                -e 's/^\([[:space:]]*shunt_ohms[[:space:]]*=[[:space:]]*\)0\.1[[:space:]]*$/\10.00375/' \
+                -e 's/^\([[:space:]]*current_noise_floor_ma[[:space:]]*=[[:space:]]*\)5\([.]0\)\?[[:space:]]*$/\130/' \
                 "$CONF_DIR/main.conf"
+            if ! grep -q '^[[:space:]]*ina3221_channel[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                if grep -q '^\[ups\]' "$CONF_DIR/main.conf"; then
+                    sed -i '/^\[ups\]/a ina3221_channel = 1' "$CONF_DIR/main.conf"
+                else
+                    printf '\n[ups]\nina3221_channel = 1\nshunt_ohms = 0.00375\ncurrent_polarity = 1\n' >> "$CONF_DIR/main.conf"
+                fi
+            fi
+            if ! grep -q '^[[:space:]]*ina3221_output_channel[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                sed -i '/^\[ups\]/a ina3221_output_channel = 2' "$CONF_DIR/main.conf"
+            fi
+            if ! grep -q '^[[:space:]]*shunt_ohms[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                sed -i '/^\[ups\]/a shunt_ohms = 0.00375' "$CONF_DIR/main.conf"
+            fi
+            if ! grep -q '^[[:space:]]*current_polarity[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                sed -i '/^\[ups\]/a current_polarity = 1' "$CONF_DIR/main.conf"
+            fi
+            if ! grep -q '^[[:space:]]*output_shunt_ohms[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                sed -i '/^\[ups\]/a output_shunt_ohms = 0.00375' "$CONF_DIR/main.conf"
+            fi
+            if ! grep -q '^[[:space:]]*output_current_polarity[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                sed -i '/^\[ups\]/a output_current_polarity = 1' "$CONF_DIR/main.conf"
+            fi
+            if ! grep -q '^[[:space:]]*ina3221_averaging[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                sed -i '/^\[ups\]/a ina3221_averaging = 16' "$CONF_DIR/main.conf"
+            fi
             if ! grep -q '^[[:space:]]*hotspot_password[[:space:]]*=' "$CONF_DIR/main.conf"; then
                 if grep -q '^\[wifi\]' "$CONF_DIR/main.conf"; then
                     sed -i '/^\[wifi\]/a hotspot_password = 12345678' "$CONF_DIR/main.conf"

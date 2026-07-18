@@ -28,6 +28,10 @@
                 <span>{{ t("ups.power") }}</span>
                 <strong data-live="overview-power">{{ overview.power }}</strong>
             </div>
+            <div>
+                <span>{{ t("ups.output_voltage") }}</span>
+                <strong data-live="output-voltage">{{ overview.output_voltage }}</strong>
+            </div>
         </div>
     </div>
 
@@ -53,6 +57,14 @@
         <div class="ups-overview-metric">
             <span>{{ t("ups.overview.route") }}</span>
             <strong data-live="overview-route">{{ t(overview.route_key) }}</strong>
+        </div>
+        <div class="ups-overview-metric">
+            <span>{{ t("ups.output_current") }}</span>
+            <strong data-live="overview-output-current">{{ overview.output_current }}</strong>
+        </div>
+        <div class="ups-overview-metric">
+            <span>{{ t("ups.output_power") }}</span>
+            <strong data-live="overview-output-power">{{ overview.output_power }}</strong>
         </div>
     </div>
 </div>

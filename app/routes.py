@@ -128,6 +128,9 @@ def build_card_status_payload(ups_snapshot=None):
     return {
         "v": snapshot.bus_voltage,
         "i": current_abs,
+        "output_v": snapshot.output_voltage,
+        "output_i": abs(snapshot.output_current_ma),
+        "output_w": snapshot.output_power_w,
         "state": state,
         "color": color,
         "ac": snapshot.mains_present,
@@ -176,6 +179,9 @@ def build_ups_overview_payload(ups_snapshot=None, card_data=None):
         "voltage": snapshot.voltage_label,
         "current": snapshot.current_label,
         "power": snapshot.power_label,
+        "output_voltage": snapshot.output_voltage_label,
+        "output_current": snapshot.output_current_label,
+        "output_power": snapshot.output_power_label,
     }
 
 
@@ -206,6 +212,10 @@ def build_live_status_payload():
         "voltage_label": ups_snapshot.voltage_label,
         "current_label": ups_snapshot.current_label,
         "power_label": ups_snapshot.power_label,
+        "output_channel": ups_snapshot.output_channel,
+        "output_voltage_label": ups_snapshot.output_voltage_label,
+        "output_current_label": ups_snapshot.output_current_label,
+        "output_power_label": ups_snapshot.output_power_label,
         "cpu_temp_label": get_cpu_temp_label(),
         "ram_label": get_ram_label(),
     }

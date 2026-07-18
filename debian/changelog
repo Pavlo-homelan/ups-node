@@ -1,3 +1,17 @@
+ups-pi-node (0.2.2) trixie; urgency=medium
+
+  * Replace the INA219 current monitor backend with INA3221 channel support.
+  * Configure the FL-2C 20 A / 75 mV external shunt at 0.00375 ohm.
+  * Preserve bidirectional current readings and add configurable polarity.
+  * Add INA3221 register conversion tests and migration defaults.
+  * Monitor the 19 V output voltage, current, and power on INA3221 channel 2.
+  * Show channel 2 output telemetry in the web UI, TFT, and integrations.
+  * Clarify TFT telemetry with separate BAT and OUT voltage/current labels.
+  * Add a two-card TFT dashboard rendered with Ubuntu and Ubuntu Mono fonts.
+  * Add a stacked 128x160 portrait layout selected from the display bounds.
+
+ -- Pavlo <pavlo@example.com>  Thu, 16 Jul 2026 12:00:00 +0300
+
 ups-pi-node (0.2.1) trixie; urgency=medium
 
   * Switch local package builds from timestamp versions to Debian revisions.

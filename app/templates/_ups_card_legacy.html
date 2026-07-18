@@ -9,6 +9,8 @@
 
     <div class="val" id="val-v" style="color: var(--yellow); font-size: 2.5em;">{{ "%.2f"|format(data.v) }}V</div>
     <div class="val" id="val-i" style="color: var(--cyan); font-size: 1.8em;">{{ "%.0f"|format(data.i) }}mA</div>
+    <div class="val" id="val-output-v" style="color: var(--green); font-size: 2em;">{{ "%.2f"|format(data.output_v) }}V OUT</div>
+    <div class="val" id="val-output-i" style="color: var(--cyan); font-size: 1.5em;">{{ "%.0f"|format(data.output_i) }}mA OUT</div>
 
     <div style="font-size: 0.8em; color: var(--muted); margin-top: 20px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; flex-wrap: wrap;">
         <div>AC: <b id="ac-status" style="color: {{ 'var(--green)' if data.ac else 'var(--red)' }}">{{ t("ups.ac_ok") if data.ac else t("ups.ac_lost") }}</b></div>

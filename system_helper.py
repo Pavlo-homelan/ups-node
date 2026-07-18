@@ -125,14 +125,68 @@ def build_wifi_connection_name(ssid):
     return f"ups-pi-node-{visible}-{digest}"
 
 
-class Ina219Direct:
-    def __init__(self, bus_number, address, shunt_ohms):
-        from smbus2 import SMBus
+class Ina3221Direct:
+    CONFIG_REGISTER = 0x00
+    SHUNT_VOLTAGE_LSB_V = 40e-6
+    BUS_VOLTAGE_LSB_V = 8e-3
+    AVERAGING_BITS = {
+        1: 0b000,
+        4: 0b001,
+        16: 0b010,
+        64: 0b011,
+        128: 0b100,
+        256: 0b101,
+        512: 0b110,
+        1024: 0b111,
+    }
 
-        self.bus = SMBus(bus_number)
+    def __init__(
+        self,
+        bus_number,
+        address,
+        channel,
+        shunt_ohms,
+        averaging_samples=16,
+        bus=None,
+        enabled_channels=None,
+    ):
+        if channel not in {1, 2, 3}:
+            raise ValueError("INA3221 channel must be 1, 2, or 3.")
+        if shunt_ohms <= 0:
+            raise ValueError("INA3221 shunt resistance must be greater than zero.")
+        if averaging_samples not in self.AVERAGING_BITS:
+            raise ValueError("Unsupported INA3221 averaging sample count.")
+
+        channels = set(enabled_channels or {channel})
+        channels.add(channel)
+        if not channels or not channels.issubset({1, 2, 3}):
+            raise ValueError("INA3221 enabled channels must be 1, 2, or 3.")
+
+        if bus is None:
+            from smbus2 import SMBus
+
+            bus = SMBus(bus_number)
+
+        self.bus = bus
         self.address = address
+        self.channel = channel
+        self.enabled_channels = frozenset(channels)
         self.shunt_ohms = shunt_ohms
-        self.bus.write_word_data(self.address, 0x00, 0x399F)
+        self.averaging_samples = averaging_samples
+        self.shunt_register = 0x01 + ((channel - 1) * 2)
+        self.bus_register = self.shunt_register + 1
+
+        # Enable the selected measurement channels with 1.1 ms conversion
+        # times and continuous shunt+bus mode. Averaging stabilizes
+        # low-current readings.
+        channel_enable = sum(1 << (15 - item) for item in self.enabled_channels)
+        averaging = self.AVERAGING_BITS[averaging_samples] << 9
+        config = channel_enable | averaging | 0x0127
+        self.bus.write_word_data(
+            self.address,
+            self.CONFIG_REGISTER,
+            self._swap_word(config),
+        )
 
     def close(self):
         close = getattr(self.bus, "close", None)
@@ -141,16 +195,43 @@ class Ina219Direct:
 
     def _read_be(self, register):
         raw = self.bus.read_word_data(self.address, register)
-        return ((raw << 8) & 0xFF00) | (raw >> 8)
+        return self._swap_word(raw)
+
+    @staticmethod
+    def _swap_word(value):
+        return ((value << 8) & 0xFF00) | ((value >> 8) & 0x00FF)
+
+    @staticmethod
+    def _registers_for_channel(channel):
+        if channel not in {1, 2, 3}:
+            raise ValueError("INA3221 channel must be 1, 2, or 3.")
+        shunt_register = 0x01 + ((channel - 1) * 2)
+        return shunt_register, shunt_register + 1
+
+    def read_channel(self, channel, shunt_ohms=None):
+        if channel not in self.enabled_channels:
+            raise ValueError("INA3221 channel is not enabled.")
+
+        resistance = self.shunt_ohms if shunt_ohms is None else shunt_ohms
+        if resistance <= 0:
+            raise ValueError("INA3221 shunt resistance must be greater than zero.")
+
+        shunt_register, bus_register = self._registers_for_channel(channel)
+        shunt_raw = self._read_be(shunt_register)
+        bus_raw = self._read_be(bus_register)
+
+        if shunt_raw & 0x8000:
+            shunt_raw -= 0x10000
+
+        shunt_steps = shunt_raw >> 3
+        bus_steps = bus_raw >> 3
+        voltage = bus_steps * self.BUS_VOLTAGE_LSB_V
+        shunt_voltage = shunt_steps * self.SHUNT_VOLTAGE_LSB_V
+        current_ma = (shunt_voltage / resistance) * 1000.0
+        return voltage, current_ma
 
     def read(self):
-        bus_raw = self._read_be(0x02)
-        shunt_raw = self._read_be(0x01)
-        if shunt_raw > 32767:
-            shunt_raw -= 65536
-        voltage = (bus_raw >> 3) * 0.004
-        current_ma = (shunt_raw * 0.01) / self.shunt_ohms
-        return voltage, current_ma
+        return self.read_channel(self.channel)
 
 
 class GpioBackend:
@@ -255,12 +336,49 @@ class DisplayRenderer:
         self.canvas = None
         self.backlight = None
         self._gpiod_value = None
+        self.font_header = None
+        self.font_label = None
+        self.font_value = None
+        self.font_metric = None
+        self.font_small = None
         if not enabled:
             return
 
+        from PIL import ImageFont
         from luma.core.interface.serial import spi
         from luma.core.render import canvas
         from luma.lcd.device import st7735
+
+        self.font_header = self._load_font(
+            ImageFont,
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            10,
+        )
+        self.font_label = self._load_font(
+            ImageFont,
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            8,
+        )
+        self.font_value = self._load_font(
+            ImageFont,
+            "/usr/share/fonts/truetype/ubuntu/UbuntuMono-B.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+            15,
+        )
+        self.font_metric = self._load_font(
+            ImageFont,
+            "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            10,
+        )
+        self.font_small = self._load_font(
+            ImageFont,
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-M.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            8,
+        )
 
         spi_kwargs = {"port": port, "device": device, "gpio_DC": dc_pin, "gpio_RST": rst_pin}
         if bus_speed_hz:
@@ -269,6 +387,21 @@ class DisplayRenderer:
         self.device = st7735(serial, width=width, height=height, rotate=rotate)
         self.canvas = canvas
         self._enable_backlight(backlight_pin, gpiochip)
+
+    @staticmethod
+    def _load_font(image_font, preferred_path, fallback_path, size):
+        for path in (preferred_path, fallback_path):
+            try:
+                return image_font.truetype(path, size)
+            except OSError:
+                continue
+        return image_font.load_default()
+
+    @staticmethod
+    def _draw_centered(draw, left, right, y, text, font, fill):
+        bounds = draw.textbbox((0, 0), text, font=font)
+        width = bounds[2] - bounds[0]
+        draw.text((left + ((right - left - width) // 2), y), text, font=font, fill=fill)
 
     def _enable_backlight(self, pin, gpiochip):
         if pin is None:
@@ -314,17 +447,106 @@ class DisplayRenderer:
         percent = snapshot.get("percent", 0)
         state = snapshot.get("state", "INIT")
         voltage = snapshot.get("v", 0.0)
-        current = snapshot.get("i", 0.0)
+        current = snapshot.get("current_ma", snapshot.get("i", 0.0))
+        output_voltage = snapshot.get("output_voltage_v", 0.0)
+        output_current = snapshot.get("output_current_ma", 0.0)
+        output_power = snapshot.get("output_power_w", 0.0)
         ac_ok = snapshot.get("ac", False)
+        percent = max(0, min(100, int(percent)))
+
+        battery_value = f"{voltage:.2f}V"
+        battery_current = f"{current:+.0f}mA"
+        output_value = f"{output_voltage:.2f}V"
+        output_current_value = f"{output_current:+.0f}mA"
+        output_power_value = f"{output_power:+.2f}W"
+        ac_text = "AC OK" if ac_ok else "AC LOST"
+        ac_color = "#78e08f" if ac_ok else "#ff6b6b"
 
         with self.canvas(self.device) as draw:
-            draw.rectangle(self.device.bounding_box, outline="white")
-            draw.text((10, 5), f"{state}: {percent}%", fill=color)
-            draw.rectangle((10, 22, 150, 32), outline="gray")
-            draw.rectangle((10, 22, 10 + int(percent * 1.4), 32), fill=color)
-            draw.text((10, 45), f"VOLT: {voltage:.2f} V", fill="yellow")
-            draw.text((10, 80), f"CURR: {current:.1f} mA", fill="cyan")
-            draw.text((10, 110), f"AC: {'OK' if ac_ok else '!!'}", fill="white")
+            bounds = self.device.bounding_box
+            screen_width = bounds[2] - bounds[0] + 1
+            screen_height = bounds[3] - bounds[1] + 1
+            if screen_height > screen_width:
+                draw.rectangle(bounds, fill="#020609", outline="#31404a")
+                draw.text((4, 3), "UPS NODE", font=self.font_header, fill="#f1f5f9")
+                draw.rounded_rectangle((80, 2, 125, 17), radius=4, outline=ac_color, fill="#081016")
+                self._draw_centered(draw, 80, 125, 5, ac_text, self.font_small, ac_color)
+
+                draw.rounded_rectangle((3, 20, 124, 88), radius=6, outline="#425466", fill="#071016")
+                self._draw_centered(draw, 3, 124, 24, "BATTERY", self.font_label, "#94a3b8")
+                self._draw_centered(draw, 3, 124, 34, battery_value, self.font_value, "#ffd43b")
+                self._draw_centered(draw, 3, 124, 54, f"I  {battery_current}", self.font_metric, "#67e8f9")
+                draw.rounded_rectangle((12, 69, 115, 76), radius=3, outline="#334155", fill="#111827")
+                if percent:
+                    battery_bar_right = 12 + max(1, int(103 * percent / 100))
+                    draw.rounded_rectangle(
+                        (12, 69, battery_bar_right, 76),
+                        radius=3,
+                        fill=color,
+                    )
+                self._draw_centered(
+                    draw,
+                    3,
+                    124,
+                    78,
+                    f"{percent}%  {state}",
+                    self.font_small,
+                    color,
+                )
+
+                draw.rounded_rectangle((3, 92, 124, 157), radius=6, outline="#246b5a", fill="#06130f")
+                self._draw_centered(draw, 3, 124, 96, "19V OUTPUT / CH2", self.font_label, "#94a3b8")
+                self._draw_centered(draw, 3, 124, 106, output_value, self.font_value, "#6ee7b7")
+                self._draw_centered(
+                    draw,
+                    3,
+                    124,
+                    127,
+                    f"I  {output_current_value}",
+                    self.font_metric,
+                    "#67e8f9",
+                )
+                self._draw_centered(
+                    draw,
+                    3,
+                    124,
+                    142,
+                    f"P  {output_power_value}",
+                    self.font_metric,
+                    "#6ee7b7",
+                )
+                return
+
+            draw.rectangle(self.device.bounding_box, fill="#020609", outline="#31404a")
+            draw.text((5, 3), "UPS NODE", font=self.font_header, fill="#f1f5f9")
+            draw.rounded_rectangle((116, 2, 157, 17), radius=4, outline=ac_color, fill="#081016")
+            self._draw_centered(draw, 116, 157, 5, ac_text, self.font_small, ac_color)
+
+            draw.rounded_rectangle((3, 20, 78, 125), radius=6, outline="#425466", fill="#071016")
+            draw.rounded_rectangle((81, 20, 156, 125), radius=6, outline="#246b5a", fill="#06130f")
+
+            self._draw_centered(draw, 3, 78, 24, "BATTERY", self.font_label, "#94a3b8")
+            self._draw_centered(draw, 3, 78, 34, battery_value, self.font_value, "#ffd43b")
+            self._draw_centered(draw, 3, 78, 54, "CURRENT", self.font_label, "#64748b")
+            self._draw_centered(draw, 3, 78, 63, battery_current, self.font_metric, "#67e8f9")
+            draw.rounded_rectangle((10, 82, 71, 89), radius=3, outline="#334155", fill="#111827")
+            if percent:
+                battery_bar_right = 10 + max(1, int(61 * percent / 100))
+                draw.rounded_rectangle(
+                    (10, 82, battery_bar_right, 89),
+                    radius=3,
+                    fill=color,
+                )
+            self._draw_centered(draw, 3, 78, 94, f"{percent}%", self.font_metric, "#f8fafc")
+            self._draw_centered(draw, 3, 78, 110, state, self.font_small, color)
+
+            self._draw_centered(draw, 81, 156, 24, "19V OUTPUT", self.font_label, "#94a3b8")
+            self._draw_centered(draw, 81, 156, 34, output_value, self.font_value, "#6ee7b7")
+            self._draw_centered(draw, 81, 156, 54, "CURRENT", self.font_label, "#64748b")
+            self._draw_centered(draw, 81, 156, 63, output_current_value, self.font_metric, "#67e8f9")
+            self._draw_centered(draw, 81, 156, 80, "POWER", self.font_label, "#64748b")
+            self._draw_centered(draw, 81, 156, 90, output_power_value, self.font_metric, "#6ee7b7")
+            self._draw_centered(draw, 81, 156, 110, "INA3221 CH2", self.font_small, "#94a3b8")
 
     def _set_backlight(self, enabled):
         if self.backlight is None:
@@ -377,11 +599,22 @@ class HardwareController:
         self.gpiochip = get_config_value(parser, "gpio", "gpiochip", "/dev/gpiochip0")
         self.i2c_bus = get_config_int(parser, "ups", "i2c_bus", 1)
         self.i2c_address = parse_i2c_address(get_config_value(parser, "ups", "i2c_address", "0x40"))
-        self.shunt_ohms = get_config_float(parser, "ups", "shunt_ohms", 0.1)
+        self.ina3221_channel = get_config_int(parser, "ups", "ina3221_channel", 1)
+        self.ina3221_output_channel = get_config_int(parser, "ups", "ina3221_output_channel", 2)
+        self.ina3221_averaging = get_config_int(parser, "ups", "ina3221_averaging", 16)
+        self.shunt_ohms = get_config_float(parser, "ups", "shunt_ohms", 0.00375)
+        self.current_polarity = get_config_float(parser, "ups", "current_polarity", 1.0)
+        self.output_shunt_ohms = get_config_float(parser, "ups", "output_shunt_ohms", 0.00375)
+        self.output_current_polarity = get_config_float(
+            parser,
+            "ups",
+            "output_current_polarity",
+            1.0,
+        )
         self.v_full = get_config_float(parser, "ups", "battery_full_voltage", 12.6)
         self.v_empty = get_config_float(parser, "ups", "battery_empty_voltage", 9.3)
         self.current_cutoff_ma = get_config_float(parser, "ups", "current_cutoff_ma", 150.0)
-        self.current_noise_floor_ma = get_config_float(parser, "ups", "current_noise_floor_ma", 5.0)
+        self.current_noise_floor_ma = get_config_float(parser, "ups", "current_noise_floor_ma", 30.0)
         self.low_voltage_shutdown_seconds = get_config_float(
             parser,
             "ups",
@@ -408,7 +641,7 @@ class HardwareController:
         self.display_bus_speed_hz = get_config_int(parser, "display", "bus_speed_hz", 0)
 
     def start(self):
-        if self.backend not in {"ina219", "hardware"}:
+        if self.backend not in {"ina3221", "hardware"}:
             return
         self.thread = threading.Thread(target=self._run, name="ups-hardware-controller", daemon=True)
         self.thread.start()
@@ -468,7 +701,14 @@ class HardwareController:
         if self.display is None:
             self._open_display()
         if self.ina is None:
-            self.ina = Ina219Direct(self.i2c_bus, self.i2c_address, self.shunt_ohms)
+            self.ina = Ina3221Direct(
+                self.i2c_bus,
+                self.i2c_address,
+                self.ina3221_channel,
+                self.shunt_ohms,
+                self.ina3221_averaging,
+                enabled_channels={self.ina3221_channel, self.ina3221_output_channel},
+            )
 
     def _open_display(self):
         try:
@@ -504,6 +744,10 @@ class HardwareController:
     def _poll_once(self):
         ac_ok = self.gpio.read_ac_ok()
         voltage, raw_current_ma = self.ina.read()
+        output_voltage, raw_output_current_ma = self.ina.read_channel(
+            self.ina3221_output_channel,
+            self.output_shunt_ohms,
+        )
         percent = self._battery_percent(voltage)
 
         if ac_ok:
@@ -538,15 +782,30 @@ class HardwareController:
         else:
             self.low_voltage_seconds = 0.0
 
-        current_abs = abs(raw_current_ma) if abs(raw_current_ma) > self.current_noise_floor_ma else 0.0
-        signed_current = current_abs if ac_ok else -current_abs
+        measured_current_ma = raw_current_ma * self.current_polarity
+        signed_current = (
+            measured_current_ma
+            if abs(measured_current_ma) > self.current_noise_floor_ma
+            else 0.0
+        )
+        current_abs = abs(signed_current)
+        measured_output_current_ma = raw_output_current_ma * self.output_current_polarity
+        signed_output_current = (
+            measured_output_current_ma
+            if abs(measured_output_current_ma) > self.current_noise_floor_ma
+            else 0.0
+        )
 
         snapshot = {
-            "backend": "ina219",
+            "backend": "ina3221",
             "v": voltage,
             "i": current_abs,
             "current_ma": signed_current,
             "power_w": voltage * (signed_current / 1000.0),
+            "output_channel": self.ina3221_output_channel,
+            "output_voltage_v": output_voltage,
+            "output_current_ma": signed_output_current,
+            "output_power_w": output_voltage * (signed_output_current / 1000.0),
             "state": state,
             "color": color,
             "ac": ac_ok,
@@ -572,6 +831,10 @@ class HardwareController:
             "i": 0.0,
             "current_ma": 0.0,
             "power_w": 0.0,
+            "output_channel": self.ina3221_output_channel,
+            "output_voltage_v": 0.0,
+            "output_current_ma": 0.0,
+            "output_power_w": 0.0,
             "state": state,
             "color": color,
             "ac": False,

@@ -24,6 +24,10 @@ class UpsSnapshot:
     battery_status: str
     load_source: str
     battery_route: str
+    output_channel: int = 2
+    output_voltage: float = 0.0
+    output_current_ma: float = 0.0
+    output_power_w: float = 0.0
     relays: list[RelayState] = field(default_factory=list)
     error: str | None = None
 
@@ -56,6 +60,18 @@ class UpsSnapshot:
         return f"{self.power_w:+.2f} W"
 
     @property
+    def output_voltage_label(self):
+        return f"{self.output_voltage:.2f} V"
+
+    @property
+    def output_current_label(self):
+        return f"{self.output_current_ma:+.0f} mA"
+
+    @property
+    def output_power_label(self):
+        return f"{self.output_power_w:+.2f} W"
+
+    @property
     def battery_percent_label(self):
         return f"{self.battery_percent}%"
 
@@ -80,6 +96,8 @@ class UpsManager:
         ac_present,
         bus_voltage,
         current_ma,
+        output_voltage,
+        output_current_ma,
         battery_empty_voltage,
         battery_full_voltage,
         system_helper_socket,
@@ -89,25 +107,32 @@ class UpsManager:
         self.ac_present = ac_present
         self.bus_voltage = bus_voltage
         self.current_ma = current_ma
+        self.output_voltage = output_voltage
+        self.output_current_ma = output_current_ma
         self.battery_empty_voltage = battery_empty_voltage
         self.battery_full_voltage = battery_full_voltage
         self.helper = SystemHelperClient(system_helper_socket)
 
     @classmethod
     def from_config(cls, config):
+        backend = str(config.get("UPS_BACKEND", "mock")).lower()
+        if backend == "ina219":
+            backend = "ina3221"
         return cls(
-            backend=config.get("UPS_BACKEND", "mock"),
+            backend=backend,
             ac_sensor_pin=config.get("AC_SENSOR_PIN", "AC_DETECT"),
             ac_present=str(config.get("AC_PRESENT", "1")).strip().lower() not in {"0", "false", "no"},
-            bus_voltage=float(config.get("INA219_BUS_VOLTAGE", "12.6")),
-            current_ma=float(config.get("INA219_CURRENT_MA", "620")),
+            bus_voltage=float(config.get("MOCK_BUS_VOLTAGE", "12.6")),
+            current_ma=float(config.get("MOCK_CURRENT_MA", "620")),
+            output_voltage=float(config.get("MOCK_OUTPUT_VOLTAGE", "19.0")),
+            output_current_ma=float(config.get("MOCK_OUTPUT_CURRENT_MA", "450")),
             battery_empty_voltage=float(config.get("BATTERY_EMPTY_VOLTAGE", "9.3")),
             battery_full_voltage=float(config.get("BATTERY_FULL_VOLTAGE", "12.6")),
             system_helper_socket=config.get("SYSTEM_HELPER_SOCKET", "/run/ups-pi-node/helper.sock"),
         )
 
     def get_snapshot(self):
-        if self.backend in {"ina219", "hardware"}:
+        if self.backend in {"ina3221", "hardware"}:
             try:
                 return self._build_helper_snapshot(self.helper.request("ups.status"))
             except SystemHelperError as exc:
@@ -149,6 +174,16 @@ class UpsManager:
                 "battery_route",
                 "Battery routed to charger" if mains_present else "Battery routed to load",
             ),
+            output_channel=int(data.get("output_channel", 2)),
+            output_voltage=float(data.get("output_voltage_v", 0.0)),
+            output_current_ma=float(data.get("output_current_ma", 0.0)),
+            output_power_w=float(
+                data.get(
+                    "output_power_w",
+                    float(data.get("output_voltage_v", 0.0))
+                    * (float(data.get("output_current_ma", 0.0)) / 1000.0),
+                )
+            ),
             relays=relays,
             error=data.get("hardware_error"),
         )
@@ -163,6 +198,8 @@ class UpsManager:
             current_ma = -current_ma
 
         power_w = self.bus_voltage * (current_ma / 1000.0)
+        output_current_ma = self.output_current_ma
+        output_power_w = self.output_voltage * (output_current_ma / 1000.0)
         battery_percent = self._calculate_battery_percent(self.bus_voltage)
         battery_status = self._battery_status_label(battery_percent)
         load_source = "UPS output to load" if mains_present else "Battery to load"
@@ -210,6 +247,10 @@ class UpsManager:
             battery_status=battery_status,
             load_source=load_source,
             battery_route=battery_route,
+            output_channel=2,
+            output_voltage=self.output_voltage,
+            output_current_ma=output_current_ma,
+            output_power_w=output_power_w,
             relays=relays,
         )
 
