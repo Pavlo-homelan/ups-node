@@ -264,8 +264,10 @@ sudo reboot
 ```
 
 Open the web UI at `http://zero2.local/` while the node is connected to Wi-Fi.
-During the 2026-07-18 validation it received `192.0.2.10` by DHCP, but that
-address may change. In fallback hotspot mode the default network is `Ups-Node`,
+During the 2026-07-18 validation its DHCP address changed from
+`192.0.2.10` to `192.0.2.40` after reconnecting. These addresses are
+observations, not permanent configuration; prefer `zero2.local` or reserve a
+lease in the router. In fallback hotspot mode the default network is `Ups-Node`,
 password `12345678`, and the portal is available at:
 
 ```text
@@ -430,3 +432,7 @@ See [docs/integrations.md](docs/integrations.md) for metric keys, Zabbix agent p
 ## Status
 
 The project is in active development. Current work is focused on the portal UI, helper isolation, deploy packaging, and custom widget support.
+
+The phased Go migration, compatibility boundary, Wi-Fi state machine, and
+acceptance criteria are documented in
+[docs/go-migration.md](docs/go-migration.md).

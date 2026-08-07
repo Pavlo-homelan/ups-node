@@ -126,14 +126,17 @@ Landscape bounds still select the two-column layout automatically.
 
 ## Network And Service Check
 
-At validation time the node was connected as a Wi-Fi client and received
-`192.0.2.10` by DHCP. The preferred address is the mDNS hostname:
+At initial validation the node received `192.0.2.10` by DHCP. After a later
+hotspot-to-client reconnect on the same day it received `192.0.2.40` and
+the old address stopped responding. The preferred address is therefore the
+mDNS hostname:
 
 ```text
 http://zero2.local/
 ```
 
-The DHCP address is an observation, not a permanent configuration. The fallback
+Both DHCP addresses are observations, not permanent configuration. Reserve a
+lease in the router when a stable numeric address is required. The fallback
 hotspot remains available at `10.42.0.1` when the node cannot join a known
 network.
 
