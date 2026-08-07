@@ -11,9 +11,7 @@
   <main class="login-shell">
     <section class="login-card" aria-labelledby="login-title">
       <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-      <p class="eyebrow">POWER TELEMETRY</p>
       <h1 id="login-title">{{.NodeID}}</h1>
-      <p class="login-lead">Керування живленням, виходом 19 В і мережею ноди.</p>
       {{if .Error}}<p class="form-error" role="alert">{{.Error}}</p>{{end}}
       <form method="post" action="/login" class="login-form">
         <input type="hidden" name="csrf_token" value="{{.CSRF}}">

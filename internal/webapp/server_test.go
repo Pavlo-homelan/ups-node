@@ -51,6 +51,25 @@ func csrfFromLogin(t *testing.T, server *Server) (*http.Cookie, string) {
 	return nil, ""
 }
 
+func TestLoginPageDoesNotContainDecorativeCopy(t *testing.T) {
+	server, _ := testServer(t)
+	request := httptest.NewRequest(http.MethodGet, "/login", nil)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login status = %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	for _, phrase := range []string{
+		"POWER TELEMETRY",
+		"Керування живленням, виходом 19 В і мережею ноди",
+	} {
+		if strings.Contains(body, phrase) {
+			t.Fatalf("login page contains decorative label %q", phrase)
+		}
+	}
+}
+
 func loginSession(t *testing.T, server *Server) (*http.Cookie, *http.Cookie) {
 	t.Helper()
 	csrfCookie, token := csrfFromLogin(t, server)

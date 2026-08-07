@@ -155,8 +155,9 @@ available through the Go service or intentionally removed from both runtimes:
 5. **UI parity and copy hygiene.** Keep labels short and technical. The Go UI
    must not add decorative or explanatory captions that consume screen space
    without carrying state, action, or measurement data. Banned examples include
-   `LIVE POWER MAP`, `Живлення під контролем`, `Мережа активна: UPS живить
-   вихід`, `where power flows`, `how current flows`, `як йде струм`, and
+   `LIVE POWER MAP`, `POWER TELEMETRY`, `Живлення під контролем`,
+   `Мережа активна: UPS живить вихід`, `Керування живленням, виходом 19 В і
+   мережею ноди`, `where power flows`, `how current flows`, `як йде струм`, and
    similar copy. Tests should block these strings from returning.
 6. **Runtime default.** Make `go` the default only after the items above pass
    local tests, package install/upgrade tests, reboot tests, Wi-Fi loss tests,
