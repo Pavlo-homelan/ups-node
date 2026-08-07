@@ -115,6 +115,13 @@ case "$1" in
                     printf '\n[wifi]\nhotspot_password = 12345678\n' >> "$CONF_DIR/main.conf"
                 fi
             fi
+            if ! grep -q '^[[:space:]]*ipv6[[:space:]]*=' "$CONF_DIR/main.conf"; then
+                if grep -q '^\[wifi\]' "$CONF_DIR/main.conf"; then
+                    sed -i '/^\[wifi\]/a ipv6 = disabled' "$CONF_DIR/main.conf"
+                else
+                    printf '\n[wifi]\nipv6 = disabled\n' >> "$CONF_DIR/main.conf"
+                fi
+            fi
             if ! grep -q '^[[:space:]]*pam_service[[:space:]]*=' "$CONF_DIR/main.conf"; then
                 if grep -q '^\[auth\]' "$CONF_DIR/main.conf"; then
                     sed -i '/^\[auth\]/a pam_service = ups-pi-node' "$CONF_DIR/main.conf"

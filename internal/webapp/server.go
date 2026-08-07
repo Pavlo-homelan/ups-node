@@ -287,7 +287,7 @@ func (server *Server) handleWiFiConnect(w http.ResponseWriter, r *http.Request) 
 	var result map[string]any
 	err := server.helper.Call(ctx, "wifi.connect", map[string]any{
 		"interface": server.config.WiFiInterface, "ssid": strings.TrimSpace(request.SSID),
-		"password": request.Password, "hidden": request.Hidden,
+		"password": request.Password, "hidden": request.Hidden, "ipv6": server.config.WiFiIPv6,
 	}, &result)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})

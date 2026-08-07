@@ -63,7 +63,7 @@ The v1 allow-list and response compatibility requirements are:
 | `auth.pam` | `username`, `password`; optional `service` | `authenticated` boolean |
 | `wifi.status` | `interface`, `hotspot_connection_name`; optional `portal_mode` | portal mode, SSID/connection, IPv4 address, state |
 | `wifi.scan` | `interface` | sorted `networks` with SSID, signal, security, connected |
-| `wifi.connect` | `interface`, `ssid`; optional password and hidden | completion `message` |
+| `wifi.connect` | `interface`, `ssid`; optional password, hidden, and `ipv6` (`disabled` default, or `auto`) | completion `message` |
 | `ups.status` | none | existing battery, output, AC, relay, and backend fields |
 
 An incompatible protocol will use a separate socket or an explicit versioned
@@ -90,6 +90,11 @@ profile. Re-entering a password must not create duplicate profiles. Existing
 profiles not owned by `ups-pi-node` are never deleted automatically. A manual
 connect operation suppresses fallback activation until that transition reaches
 a terminal state or times out.
+
+Client Wi-Fi profiles disable IPv6 by default (`ipv6.method=ignore` in
+NetworkManager). The Go web service reads `[wifi] ipv6 = disabled|auto` or
+`UPS_PI_NODE_WIFI_IPV6`; existing profiles are normalized on connect so legacy
+`ipv6.addresses` arrays are not sent back through D-Bus.
 
 ## Deployment and ownership
 
@@ -150,8 +155,9 @@ available through the Go service or intentionally removed from both runtimes:
 5. **UI parity and copy hygiene.** Keep labels short and technical. The Go UI
    must not add decorative or explanatory captions that consume screen space
    without carrying state, action, or measurement data. Banned examples include
-   `LIVE POWER MAP`, `where power flows`, `how current flows`, `як йде струм`,
-   and similar copy. Tests should block these strings from returning.
+   `LIVE POWER MAP`, `Живлення під контролем`, `Мережа активна: UPS живить
+   вихід`, `where power flows`, `how current flows`, `як йде струм`, and
+   similar copy. Tests should block these strings from returning.
 6. **Runtime default.** Make `go` the default only after the items above pass
    local tests, package install/upgrade tests, reboot tests, Wi-Fi loss tests,
    and live hardware checks on the Raspberry Pi Zero 2 W.

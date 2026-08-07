@@ -19,10 +19,13 @@ func TestConnectUpdatesCanonicalProfileWithoutCreatingDuplicate(t *testing.T) {
 		"MyRouter",
 		"old-password",
 		false,
+		"auto",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+	settings["ipv6"]["addresses"] = dbus.MakeVariant([][]dbus.Variant{})
+	settings["ipv6"]["dns"] = dbus.MakeVariant([][]dbus.Variant{})
 
 	var methods []string
 	var updated connectionSettings
@@ -46,7 +49,7 @@ func TestConnectUpdatesCanonicalProfileWithoutCreatingDuplicate(t *testing.T) {
 	}}
 	client := &Client{bus: bus}
 
-	if _, err := client.Connect(context.Background(), "wlan0", "MyRouter", "new-password", false); err != nil {
+	if _, err := client.Connect(context.Background(), "wlan0", "MyRouter", "new-password", false, "disabled"); err != nil {
 		t.Fatal(err)
 	}
 	if updated == nil {
@@ -54,6 +57,15 @@ func TestConnectUpdatesCanonicalProfileWithoutCreatingDuplicate(t *testing.T) {
 	}
 	if actual := variantString(updated["802-11-wireless-security"]["psk"]); actual != "new-password" {
 		t.Fatalf("updated PSK = %q", actual)
+	}
+	if actual := variantString(updated["ipv6"]["method"]); actual != "ignore" {
+		t.Fatalf("updated ipv6.method = %q", actual)
+	}
+	if _, exists := updated["ipv6"]["addresses"]; exists {
+		t.Fatal("legacy ipv6.addresses was sent back to NetworkManager")
+	}
+	if _, exists := updated["ipv6"]["dns"]; exists {
+		t.Fatal("legacy ipv6.dns was sent back to NetworkManager")
 	}
 	for _, method := range methods {
 		if method == settingsInterface+".AddConnection2" || method == connectionInterface+".Delete" {
@@ -88,7 +100,7 @@ func TestConnectCreatesOnlyCanonicalProfileWhenMissing(t *testing.T) {
 	}}
 	client := &Client{bus: bus}
 
-	if _, err := client.Connect(context.Background(), "wlan0", "MyRouter", "password", false); err != nil {
+	if _, err := client.Connect(context.Background(), "wlan0", "MyRouter", "password", false, "disabled"); err != nil {
 		t.Fatal(err)
 	}
 	if addCalls != 1 {

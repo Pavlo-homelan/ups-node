@@ -11,12 +11,19 @@ import (
 type fakeHelper struct {
 	mu      sync.Mutex
 	actions []string
+	calls   []helperCall
 	errors  map[string]error
+}
+
+type helperCall struct {
+	action string
+	params map[string]any
 }
 
 func (helper *fakeHelper) Call(_ context.Context, action string, params map[string]any, target any) error {
 	helper.mu.Lock()
 	helper.actions = append(helper.actions, action)
+	helper.calls = append(helper.calls, helperCall{action: action, params: cloneParams(params)})
 	err := helper.errors[action]
 	helper.mu.Unlock()
 	if err != nil {
@@ -49,6 +56,14 @@ func (helper *fakeHelper) Call(_ context.Context, action string, params map[stri
 	}
 	encoded, _ := json.Marshal(value)
 	return json.Unmarshal(encoded, target)
+}
+
+func cloneParams(params map[string]any) map[string]any {
+	copy := map[string]any{}
+	for key, value := range params {
+		copy[key] = value
+	}
+	return copy
 }
 
 func TestHubCombinesUPSAndWiFiIntoOneSSESnapshot(t *testing.T) {

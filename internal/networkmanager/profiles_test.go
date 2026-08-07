@@ -16,7 +16,7 @@ func TestManagedConnectionNameMatchesPythonHelper(t *testing.T) {
 }
 
 func TestConnectionSettingsDoNotExposePasswordOutsideSecuritySection(t *testing.T) {
-	settings, err := buildConnectionSettings("wlan0", "managed", "router", "secret", false)
+	settings, err := buildConnectionSettings("wlan0", "managed", "router", "secret", false, "disabled")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,6 +26,35 @@ func TestConnectionSettingsDoNotExposePasswordOutsideSecuritySection(t *testing.
 	}
 	if _, exists := settings["connection"]["psk"]; exists {
 		t.Fatal("PSK leaked into connection metadata")
+	}
+}
+
+func TestConnectionSettingsDisableIPv6ByDefault(t *testing.T) {
+	settings, err := buildConnectionSettings("wlan0", "managed", "router", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual := variantString(settings["ipv6"]["method"]); actual != "ignore" {
+		t.Fatalf("ipv6.method = %q, want ignore", actual)
+	}
+	if _, exists := settings["ipv6"]["addresses"]; exists {
+		t.Fatal("ipv6.addresses must not be emitted for automatic profiles")
+	}
+}
+
+func TestConnectionSettingsCanEnableIPv6Auto(t *testing.T) {
+	settings, err := buildConnectionSettings("wlan0", "managed", "router", "", false, "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual := variantString(settings["ipv6"]["method"]); actual != "auto" {
+		t.Fatalf("ipv6.method = %q, want auto", actual)
+	}
+}
+
+func TestInvalidIPv6ModeIsRejectedBeforeNetworkManagerCall(t *testing.T) {
+	if _, err := buildConnectionSettings("wlan0", "managed", "router", "", false, "manual"); err == nil {
+		t.Fatal("invalid IPv6 mode was accepted")
 	}
 }
 

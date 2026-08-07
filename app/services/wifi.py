@@ -65,6 +65,7 @@ class WifiManager:
         hotspot_ssid,
         hotspot_address,
         helper_socket,
+        ipv6="disabled",
         portal_mode="auto",
     ):
         self.backend = (backend or "mock").lower()
@@ -73,6 +74,7 @@ class WifiManager:
         self.hotspot_ssid = hotspot_ssid
         self.hotspot_address = hotspot_address
         self.helper_socket = helper_socket
+        self.ipv6 = ipv6
         self.portal_mode = portal_mode
         self._mock_connected_ssid = None
 
@@ -85,6 +87,7 @@ class WifiManager:
             hotspot_ssid=config.get("HOTSPOT_SSID", "Ups-Node"),
             hotspot_address=config.get("HOTSPOT_ADDRESS", "10.42.0.1"),
             helper_socket=config.get("SYSTEM_HELPER_SOCKET", "/run/ups-pi-node/helper.sock"),
+            ipv6=config.get("WIFI_IPV6", "disabled"),
             portal_mode=config.get("PORTAL_MODE", "auto"),
         )
 
@@ -218,6 +221,7 @@ class WifiManager:
                 "ssid": ssid,
                 "password": password,
                 "hidden": hidden,
+                "ipv6": self.ipv6,
             },
         )
         return WifiActionResult(True, data.get("message") or f"Connection command for network '{ssid}' completed.")

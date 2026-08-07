@@ -46,6 +46,7 @@ def build_service_config(app_config, config_manager):
                 "UPS_PI_NODE_HOTSPOT_ADDRESS",
                 config_manager.wifi_hotspot_address,
             ),
+            "WIFI_IPV6": env_or_config("UPS_PI_NODE_WIFI_IPV6", config_manager.wifi_ipv6),
             "PORTAL_MODE": env_or_config("UPS_PI_NODE_PORTAL_MODE", config_manager.wifi_portal_mode),
             "UPS_BACKEND": env_or_config("UPS_PI_NODE_UPS_BACKEND", config_manager.ups_backend),
             "AC_SENSOR_PIN": env_or_config("UPS_PI_NODE_AC_SENSOR_PIN", config_manager.ups_ac_sensor_pin),

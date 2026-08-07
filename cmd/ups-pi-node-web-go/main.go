@@ -48,6 +48,9 @@ func run() error {
 	if token := os.Getenv("UPS_PI_NODE_INTEGRATIONS_TOKEN"); token != "" {
 		config.IntegrationsToken = token
 	}
+	if ipv6Mode := os.Getenv("UPS_PI_NODE_WIFI_IPV6"); ipv6Mode != "" {
+		config.WiFiIPv6 = webapp.NormalizeWiFiIPv6Mode(ipv6Mode)
+	}
 	config.PortalUsername = os.Getenv("UPS_PI_NODE_USERNAME")
 	config.PortalPassword = os.Getenv("UPS_PI_NODE_PASSWORD")
 	config.SecureCookies = secureCookies

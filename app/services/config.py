@@ -126,6 +126,10 @@ class ConfigManager:
         return self.get("wifi", "hotspot_address", fallback="10.42.0.1")
 
     @property
+    def wifi_ipv6(self):
+        return self.get("wifi", "ipv6", fallback=os.getenv("UPS_PI_NODE_WIFI_IPV6", "disabled"))
+
+    @property
     def wifi_portal_mode(self):
         return self.get("wifi", "portal_mode", fallback="auto")
 

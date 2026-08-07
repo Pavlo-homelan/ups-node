@@ -21,6 +21,7 @@ func (client *Client) Connect(
 	ssid string,
 	password string,
 	hidden bool,
+	ipv6Mode string,
 ) (ConnectResult, error) {
 	if ssid == "" {
 		return ConnectResult{}, fmt.Errorf("SSID must not be empty")
@@ -37,7 +38,7 @@ func (client *Client) Connect(
 	}
 
 	if existing == nil {
-		settings, buildErr := buildConnectionSettings(interfaceName, connectionID, ssid, password, hidden)
+		settings, buildErr := buildConnectionSettings(interfaceName, connectionID, ssid, password, hidden, ipv6Mode)
 		if buildErr != nil {
 			return ConnectResult{}, buildErr
 		}
@@ -45,8 +46,10 @@ func (client *Client) Connect(
 		if err != nil {
 			return ConnectResult{}, err
 		}
-	} else if password != "" || hidden {
-		updateConnectionSettings(existing, interfaceName, connectionID, ssid, password, hidden)
+	} else {
+		if err := updateConnectionSettings(existing, interfaceName, connectionID, ssid, password, hidden, ipv6Mode); err != nil {
+			return ConnectResult{}, err
+		}
 		if err := client.updateConnection(ctx, profilePath, existing); err != nil {
 			return ConnectResult{}, err
 		}
@@ -149,7 +152,12 @@ func buildConnectionSettings(
 	ssid string,
 	password string,
 	hidden bool,
+	ipv6Mode string,
 ) (connectionSettings, error) {
+	ipv6Method, err := networkManagerIPv6Method(ipv6Mode)
+	if err != nil {
+		return nil, err
+	}
 	uuid, err := randomUUID()
 	if err != nil {
 		return nil, fmt.Errorf("generate NetworkManager profile UUID: %w", err)
@@ -168,7 +176,7 @@ func buildConnectionSettings(
 			"hidden": dbus.MakeVariant(hidden),
 		},
 		"ipv4": {"method": dbus.MakeVariant("auto")},
-		"ipv6": {"method": dbus.MakeVariant("auto")},
+		"ipv6": {"method": dbus.MakeVariant(ipv6Method)},
 	}
 	if password != "" {
 		settings["802-11-wireless-security"] = securitySettings(password)
@@ -183,7 +191,12 @@ func updateConnectionSettings(
 	ssid string,
 	password string,
 	hidden bool,
-) {
+	ipv6Mode string,
+) error {
+	ipv6Method, err := networkManagerIPv6Method(ipv6Mode)
+	if err != nil {
+		return err
+	}
 	if settings["connection"] == nil {
 		settings["connection"] = make(map[string]dbus.Variant)
 	}
@@ -201,12 +214,26 @@ func updateConnectionSettings(
 	if password != "" {
 		settings["802-11-wireless-security"] = securitySettings(password)
 	}
+	settings["ipv4"] = map[string]dbus.Variant{"method": dbus.MakeVariant("auto")}
+	settings["ipv6"] = map[string]dbus.Variant{"method": dbus.MakeVariant(ipv6Method)}
+	return nil
 }
 
 func securitySettings(password string) map[string]dbus.Variant {
 	return map[string]dbus.Variant{
 		"key-mgmt": dbus.MakeVariant("wpa-psk"),
 		"psk":      dbus.MakeVariant(password),
+	}
+}
+
+func networkManagerIPv6Method(mode string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "disabled", "disable", "off", "false", "no", "0", "ignore":
+		return "ignore", nil
+	case "auto", "enabled", "enable", "on", "true", "yes", "1":
+		return "auto", nil
+	default:
+		return "", fmt.Errorf("unsupported Wi-Fi IPv6 mode %q", mode)
 	}
 }
 

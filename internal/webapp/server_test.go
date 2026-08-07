@@ -104,6 +104,8 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	}
 	for _, phrase := range []string{
 		"LIVE POWER MAP",
+		"Живлення під контролем",
+		"Мережа активна: UPS живить вихід",
 		"МАРШРУТ ЕНЕРГІЇ",
 		"Звідки й куди",
 		"UPS control node",
@@ -136,6 +138,43 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "MyRouter") {
 		t.Fatalf("CSRF mutation response = %d %s", recorder.Code, recorder.Body.String())
 	}
+}
+
+func TestWiFiConnectForwardsConfiguredIPv6Mode(t *testing.T) {
+	config := secureTestConfig()
+	config.AuthMode = "env"
+	config.PortalUsername = "admin"
+	config.PortalPassword = "secret"
+	config.WiFiIPv6 = "auto"
+	server, helper := testServerWithConfig(t, config)
+	session, csrfCookie := loginSession(t, server)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/wifi/connect",
+		strings.NewReader(`{"ssid":"MyRouter","password":"secret"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-CSRF-Token", csrfCookie.Value)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("connect response = %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	helper.mu.Lock()
+	defer helper.mu.Unlock()
+	for _, call := range helper.calls {
+		if call.action == "wifi.connect" {
+			if actual := call.params["ipv6"]; actual != "auto" {
+				t.Fatalf("helper ipv6 param = %#v, want auto", actual)
+			}
+			return
+		}
+	}
+	t.Fatal("wifi.connect helper call was not made")
 }
 
 func TestIntegrationEndpointsPreservePythonShapeWithoutSession(t *testing.T) {

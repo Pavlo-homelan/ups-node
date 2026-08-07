@@ -41,6 +41,8 @@ hotspot_connection = ups-pi-node-hotspot
 hotspot_ssid = Ups-Node
 hotspot_password = 12345678
 hotspot_address = 10.42.0.1
+# Client Wi-Fi IPv6: disabled | auto
+ipv6 = disabled
 # Portal mode: auto | ap | client
 portal_mode = auto
 

@@ -15,6 +15,7 @@ type Config struct {
 	HelperSocket      string
 	WiFiInterface     string
 	HotspotConnection string
+	WiFiIPv6          string
 	PortalMode        string
 	AuthMode          string
 	PAMService        string
@@ -34,6 +35,7 @@ func DefaultConfig() Config {
 		HelperSocket:      "/run/ups-pi-node/helper.sock",
 		WiFiInterface:     "wlan0",
 		HotspotConnection: "ups-pi-node-hotspot",
+		WiFiIPv6:          "disabled",
 		PortalMode:        "auto",
 		AuthMode:          "pam",
 		PAMService:        "ups-pi-node",
@@ -54,12 +56,28 @@ func LoadConfig(path string) (Config, error) {
 	config.HelperSocket = values.Get("system", "helper_socket", config.HelperSocket)
 	config.WiFiInterface = values.Get("wifi", "interface", config.WiFiInterface)
 	config.HotspotConnection = values.Get("wifi", "hotspot_connection", config.HotspotConnection)
+	config.WiFiIPv6 = normalizeWiFiIPv6Mode(values.Get("wifi", "ipv6", config.WiFiIPv6))
 	config.PortalMode = strings.ToLower(values.Get("wifi", "portal_mode", config.PortalMode))
 	config.AuthMode = strings.ToLower(values.Get("auth", "mode", config.AuthMode))
 	config.PAMService = values.Get("auth", "pam_service", config.PAMService)
 	// Environment-only secrets and credentials are added by the process entry
 	// point before the complete configuration is validated by NewServer.
 	return config, nil
+}
+
+func NormalizeWiFiIPv6Mode(value string) string {
+	return normalizeWiFiIPv6Mode(value)
+}
+
+func normalizeWiFiIPv6Mode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "disabled", "disable", "off", "false", "no", "0", "ignore":
+		return "disabled"
+	case "auto", "enabled", "enable", "on", "true", "yes", "1":
+		return "auto"
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
 }
 
 func (config Config) Validate() error {
@@ -71,6 +89,9 @@ func (config Config) Validate() error {
 	}
 	if config.AuthMode != "pam" && config.AuthMode != "env" && config.AuthMode != "mock" {
 		return fmt.Errorf("unsupported auth mode %q", config.AuthMode)
+	}
+	if config.WiFiIPv6 != "disabled" && config.WiFiIPv6 != "auto" {
+		return fmt.Errorf("unsupported Wi-Fi IPv6 mode %q", config.WiFiIPv6)
 	}
 	if config.AuthMode == "mock" && !config.AllowInsecureAuth {
 		return fmt.Errorf("mock authentication requires explicit --allow-insecure-auth")

@@ -39,7 +39,8 @@ func Router(client *Client) helper.Router {
 			}
 			password, _ := params["password"].(string)
 			hidden, _ := params["hidden"].(bool)
-			return client.Connect(ctx, interfaceName, ssid, password, hidden)
+			ipv6Mode, _ := params["ipv6"].(string)
+			return client.Connect(ctx, interfaceName, ssid, password, hidden, ipv6Mode)
 		},
 	}
 }
