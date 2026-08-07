@@ -49,14 +49,15 @@ var batteryStatusCodes = map[string]int{
 }
 
 func (server *Server) integrationsAllowed(r *http.Request) bool {
-	if server.config.IntegrationsToken == "" {
+	config := server.configSnapshot()
+	if config.IntegrationsToken == "" {
 		return true
 	}
 	supplied := r.Header.Get("X-UPS-PI-NODE-Token")
 	if supplied == "" {
 		supplied = r.URL.Query().Get("token")
 	}
-	return supplied != "" && constantTimeEqual(supplied, server.config.IntegrationsToken)
+	return supplied != "" && constantTimeEqual(supplied, config.IntegrationsToken)
 }
 
 func (server *Server) integrationStatus(w http.ResponseWriter, r *http.Request) (LiveStatus, bool) {
@@ -77,7 +78,7 @@ func (server *Server) handleIntegrationMetrics(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, buildMetricsPayload(status, server.config.NodeID))
+	writeJSON(w, http.StatusOK, buildMetricsPayload(status, server.configSnapshot().NodeID))
 }
 
 func (server *Server) handleZabbixMetrics(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +86,7 @@ func (server *Server) handleZabbixMetrics(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	payload := buildMetricsPayload(status, server.config.NodeID)
+	payload := buildMetricsPayload(status, server.configSnapshot().NodeID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema":  payload["schema"],
 		"node":    payload["node"],
@@ -122,7 +123,7 @@ func (server *Server) handleHomeAssistantDiscovery(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
-	writeJSON(w, http.StatusOK, buildHomeAssistantPayload(server.config.NodeID))
+	writeJSON(w, http.StatusOK, buildHomeAssistantPayload(server.configSnapshot().NodeID))
 }
 
 func buildMetricsPayload(status LiveStatus, nodeID string) map[string]any {

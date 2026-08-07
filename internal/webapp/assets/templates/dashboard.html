@@ -1,141 +1,172 @@
 {{define "dashboard.html"}}<!doctype html>
 <html lang="{{.Language}}">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
-  <meta name="csrf-token" content="{{.CSRF}}">
-  <title>{{.NodeID}} · Dashboard</title>
-  <link rel="stylesheet" href="/assets/css/app.css">
-  <script src="/assets/js/dashboard.js" defer></script>
+  {{template "app_head" .}}
+  <title>{{.NodeID}}</title>
 </head>
-<body class="dashboard-page">
-  <div id="initial-status" hidden>{{.InitialStatus}}</div>
-  <div class="ambient ambient-one" aria-hidden="true"></div>
-  <div class="ambient ambient-two" aria-hidden="true"></div>
-  <header class="topbar">
-    <a class="brand" href="/dashboard" aria-label="Dashboard {{.NodeID}}">
-      <span class="brand-mark compact" aria-hidden="true"><span></span><span></span><span></span></span>
-      <span><strong>{{.NodeID}}</strong></span>
-    </a>
-    <div class="topbar-actions">
-      <button class="ghost-button" id="open-network" type="button">Мережа</button>
-      <span class="user-chip">{{.Username}}</span>
-      <form method="post" action="/logout">
-        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-        <button class="icon-button" type="submit" aria-label="Вийти">↗</button>
-      </form>
+<body class="app-page">
+  {{template "page_header" .}}
+  <div class="container">
+    <div class="dashboard-grid">
+      {{range .DashboardWidgets}}
+        {{if eq .Kind "ups"}}
+          {{template "dashboard_widget_ups" .}}
+        {{else if eq .Kind "ups_overview"}}
+          {{template "dashboard_widget_ups_overview" .}}
+        {{else if eq .Kind "sensor_cpu"}}
+          {{template "dashboard_widget_sensor" .}}
+        {{else if eq .Kind "sensor_ram"}}
+          {{template "dashboard_widget_sensor" .}}
+        {{else if eq .Kind "status_wifi"}}
+          {{template "dashboard_widget_status" .}}
+        {{end}}
+      {{else}}
+        <div class="card dashboard-empty">
+          <h2>{{tr $.Language "dashboard.empty.title"}}</h2>
+          <a class="secondary-button dashboard-empty-link" href="/system">{{tr $.Language "dashboard.empty.action"}}</a>
+        </div>
+      {{end}}
     </div>
-  </header>
-
-  <main class="dashboard-shell">
-    <section class="status-row" aria-label="Стан системи">
-      <span class="state-pill" id="ups-state">INIT</span>
-      <p class="status-summary" id="system-summary">Очікування телеметрії…</p>
-      <div class="live-state" id="connection-state" data-state="connecting">
-        <span class="live-dot"></span>
-        <span id="connection-label">Підключення</span>
-        <time id="updated-time">--:--:--</time>
-      </div>
-    </section>
-
-    <section class="power-map card" id="power-map" aria-label="Схема живлення">
-      <svg class="flow-diagram" viewBox="0 0 820 250" role="img" aria-labelledby="flow-title flow-desc">
-        <title id="flow-title">Схема живлення</title>
-        <desc id="flow-desc">Мережа 220 В, UPS, акумулятор і вихід 19 В</desc>
-        <defs>
-          <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
-        </defs>
-        <path class="flow-track" d="M134 74 H352"></path>
-        <path class="flow-line flow-mains" d="M134 74 H352"></path>
-        <path class="flow-track" d="M468 74 H686"></path>
-        <path class="flow-line flow-load" d="M468 74 H686"></path>
-        <path class="flow-track" d="M410 123 V191"></path>
-        <path class="flow-line flow-battery" d="M410 123 V191"></path>
-        <g class="flow-node mains-node" transform="translate(28 34)">
-          <rect width="106" height="80" rx="22"></rect><text x="53" y="34">220 В</text><text class="node-meta" x="53" y="57" id="flow-mains-label">--</text>
-        </g>
-        <g class="flow-node ups-node" transform="translate(352 34)">
-          <rect width="116" height="90" rx="26"></rect><text x="58" y="38">UPS</text><text class="node-meta" x="58" y="64" id="flow-ups-label">--</text>
-        </g>
-        <g class="flow-node load-node" transform="translate(686 34)">
-          <rect width="106" height="80" rx="22"></rect><text x="53" y="34">19 В</text><text class="node-meta" x="53" y="57">CH2 OUT</text>
-        </g>
-        <g class="flow-node battery-node" transform="translate(352 191)">
-          <rect width="116" height="54" rx="18"></rect><text x="58" y="24">BATTERY</text><text class="node-meta" x="58" y="42" id="flow-battery-label">--</text>
-        </g>
-      </svg>
-    </section>
-
-    <section class="metrics-grid" aria-label="Електричні вимірювання">
-      <article class="metric-card battery-card card">
-        <div class="card-heading compact-heading">
-          <h2>Акумулятор</h2>
-          <span class="status-badge" id="battery-status">--</span>
-        </div>
-        <div class="battery-layout">
-          <div class="battery-visual" role="img" aria-label="Рівень заряду акумулятора">
-            <div class="battery-cap"></div>
-            <div class="battery-body"><div class="battery-fill" id="battery-fill"><span></span></div></div>
-            <strong id="battery-percent">--%</strong>
-          </div>
-          <div class="metric-values">
-            <div><span>Напруга батареї</span><strong data-number="v">--</strong><em>V</em></div>
-            <div><span>Струм батареї</span><strong data-number="current_ma">--</strong><em>mA</em></div>
-            <div><span>Потужність батареї</span><strong data-number="power_w">--</strong><em>W</em></div>
-          </div>
-        </div>
-        <svg class="sparkline" viewBox="0 0 400 72" preserveAspectRatio="none" aria-label="Історія напруги батареї"><polyline id="battery-history" points=""></polyline></svg>
-      </article>
-
-      <article class="metric-card output-card card">
-        <div class="card-heading compact-heading">
-          <h2>Вихід 19 В</h2>
-          <span class="output-pulse" aria-hidden="true"></span>
-        </div>
-        <div class="output-orb" aria-hidden="true"><span>19V</span></div>
-        <div class="metric-values output-values">
-          <div><span>Напруга виходу</span><strong data-number="output_v">--</strong><em>V</em></div>
-          <div><span>Струм навантаження</span><strong data-number="output_i">--</strong><em>mA</em></div>
-          <div><span>Потужність навантаження</span><strong data-number="output_w">--</strong><em>W</em></div>
-        </div>
-        <svg class="sparkline output-spark" viewBox="0 0 400 72" preserveAspectRatio="none" aria-label="Історія струму виходу"><polyline id="output-history" points=""></polyline></svg>
-      </article>
-    </section>
-
-    <section class="secondary-grid" aria-label="Система і мережа">
-      <article class="card compact-card">
-        <div class="card-heading compact-heading"><h2>Система</h2></div>
-        <div class="system-metrics">
-          <div><span>CPU</span><strong data-number="cpu_temp">--</strong><em>°C</em></div>
-          <div><span>RAM</span><strong data-number="ram_percent">--</strong><em>%</em></div>
-          <div><span>Використано</span><strong data-number="ram_used">--</strong><em>MB</em></div>
-        </div>
-      </article>
-      <article class="card compact-card network-card">
-        <div class="card-heading compact-heading"><h2>Wi‑Fi</h2><span class="wifi-waves" aria-hidden="true"><i></i><i></i><i></i></span></div>
-        <dl class="network-details">
-          <div><dt>Мережа</dt><dd id="wifi-ssid">--</dd></div>
-          <div><dt>Адреса</dt><dd id="wifi-ip">--</dd></div>
-          <div><dt>Режим</dt><dd id="wifi-mode">--</dd></div>
-        </dl>
-      </article>
-    </section>
-
-    <p class="diagnostic-error" id="diagnostic-error" role="status" hidden></p>
-  </main>
-
-  <dialog class="network-dialog" id="network-dialog">
-    <form method="dialog" class="dialog-heading"><h2>Wi‑Fi</h2><button class="icon-button" value="cancel" aria-label="Закрити">×</button></form>
-    <button class="secondary-button" id="scan-network" type="button">Сканувати мережі</button>
-    <div class="network-list" id="network-list" aria-live="polite"></div>
-    <form class="connect-form" id="connect-form">
-      <label><span>SSID</span><input id="connect-ssid" maxlength="256" required></label>
-      <label><span>Пароль</span><input id="connect-password" type="password" maxlength="4096" autocomplete="new-password"></label>
-      <label class="check-label"><input id="connect-hidden" type="checkbox"><span>Прихована мережа</span></label>
-      <button class="primary-button" type="submit">Підключити</button>
-      <p class="form-message" id="network-message" role="status"></p>
-    </form>
-  </dialog>
+  </div>
+  {{template "page_footer" .}}
+  {{template "app_scripts" .}}
 </body>
 </html>{{end}}
+
+{{define "dashboard_widget_ups"}}
+<div class="card ups-widget" data-dashboard-widget="{{.ID}}">
+  <div class="widget-head">
+    <div>
+      <span class="widget-label">{{tr .Language "ups.power"}}</span>
+      <h2 id="status-title" class="{{.Data.State}}" data-live="state">{{.Data.StateLabel}}</h2>
+    </div>
+    <div class="status-chip">
+      <span id="ac-status" data-live="ac" style="color: {{if .Data.AC}}var(--green){{else}}var(--red){{end}}">{{.Data.ACLabel}}</span>
+    </div>
+  </div>
+
+  <div class="widget-body">
+    <div class="widget-visual">
+      <div id="battery-gauge" class="battery-gauge" style="--battery-level: {{.Data.Percent}}%; --battery-color: {{.Data.Color}};">
+        <div class="battery-gauge-core">
+          <strong id="battery-percent-widget" data-live="percent">{{.Data.Percent}}%</strong>
+          <span>{{tr .Language "ups.battery"}}</span>
+        </div>
+      </div>
+      <div class="battery-can" style="--battery-level: {{.Data.Percent}}%; --battery-color: {{.Data.Color}};">
+        <div class="battery-cap"></div>
+        <div class="battery-can-fill"></div>
+        <strong data-live="percent">{{.Data.Percent}}%</strong>
+      </div>
+    </div>
+
+    <div class="widget-metrics">
+      <div class="widget-metric">
+        <span>{{tr .Language "ups.voltage"}}</span>
+        <strong id="val-v" data-live="voltage">{{printf "%.2f" .Data.VoltageV}}V</strong>
+      </div>
+      <div class="widget-metric">
+        <span>{{tr .Language "ups.current"}}</span>
+        <strong id="val-i" data-live="current">{{printf "%.0f" .Data.CurrentMA}}mA</strong>
+      </div>
+      <div class="widget-metric">
+        <span>{{tr .Language "ups.output_voltage"}}</span>
+        <strong id="val-output-v" data-live="output-voltage">{{printf "%.2f" .Data.OutputVoltageV}}V</strong>
+      </div>
+      <div class="widget-metric">
+        <span>{{tr .Language "ups.output_current"}}</span>
+        <strong id="val-output-i" data-live="output-current">{{printf "%.0f" .Data.OutputCurrentMA}}mA</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="oled-readout">
+    <div class="oled-line">
+      <span>{{tr .Language "ups.power"}}</span>
+      <b data-live="state">{{.Data.StateLabel}}</b>
+    </div>
+    <strong class="oled-percent" data-live="percent">{{.Data.Percent}}%</strong>
+    <div class="oled-segments" style="--battery-level: {{.Data.Percent}}%; --battery-color: {{.Data.Color}}"></div>
+    <div class="oled-row"><span>{{tr .Language "ups.voltage"}}</span><b data-live="voltage">{{printf "%.2f" .Data.VoltageV}}V</b></div>
+    <div class="oled-row"><span>{{tr .Language "ups.current"}}</span><b data-live="current">{{printf "%.0f" .Data.CurrentMA}}mA</b></div>
+    <div class="oled-row"><span>{{tr .Language "ups.output_voltage"}}</span><b data-live="output-voltage">{{printf "%.2f" .Data.OutputVoltageV}}V</b></div>
+    <div class="oled-row"><span>{{tr .Language "ups.output_current"}}</span><b data-live="output-current">{{printf "%.0f" .Data.OutputCurrentMA}}mA</b></div>
+    <div class="oled-row"><span>CPU</span><b><span data-live="cpu">{{printf "%.1f" .Data.CPU}}</span>&deg;C</b></div>
+    <div class="oled-row"><span>RAM</span><b data-live="ram">{{tr .Language "ups.loading"}}</b></div>
+  </div>
+
+  <div class="radial-hub">
+    <div class="radial-node radial-node-top"><span>{{tr .Language "ups.voltage"}}</span><b data-live="voltage">{{printf "%.2f" .Data.VoltageV}}V</b></div>
+    <div class="radial-node radial-node-right"><span>{{tr .Language "ups.current"}}</span><b data-live="current">{{printf "%.0f" .Data.CurrentMA}}mA</b></div>
+    <div class="radial-node radial-node-bottom"><span>{{tr .Language "ups.output_voltage"}}</span><b data-live="output-voltage">{{printf "%.2f" .Data.OutputVoltageV}}V</b></div>
+    <div class="radial-node radial-node-left"><span>{{tr .Language "ups.output_current"}}</span><b data-live="output-current">{{printf "%.0f" .Data.OutputCurrentMA}}mA</b></div>
+  </div>
+
+  <div class="battery-container widget-bar">
+    <div id="battery-bar" class="battery-bar" style="width: {{.Data.Percent}}%; background: {{.Data.Color}};"></div>
+  </div>
+
+  <div class="widget-foot">
+    <div>
+      <span>CPU</span>
+      <b id="cpu-temp" data-live="cpu">{{printf "%.1f" .Data.CPU}}</b><span>&deg;C</span>
+    </div>
+    <div>
+      <span>RAM</span>
+      <b id="ram-info" data-live="ram">{{tr .Language "ups.loading"}}</b>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "dashboard_widget_ups_overview"}}
+<div class="card ups-overview-widget" data-dashboard-widget="{{.ID}}" style="--battery-level: {{.Overview.Percent}}%; --battery-color: {{.Overview.Color}};">
+  <div class="ups-overview-head">
+    <div>
+      <span class="ups-overview-kicker">{{tr .Language "ups.overview.kicker"}}</span>
+      <h2>{{tr .Language "ups.overview.title"}}</h2>
+    </div>
+    <span class="ups-overview-pill battery-status-{{.Overview.StatusClass}}" data-battery-status-pill data-live="battery-status">{{.Overview.StatusLabel}}</span>
+  </div>
+  <div class="ups-overview-main">
+    <div class="ups-overview-charge">
+      <span>{{tr .Language "ups.overview.charge"}}</span>
+      <strong data-live="percent">{{.Overview.Percent}}%</strong>
+      <small data-live="overview-direction">{{.Overview.Direction}}</small>
+    </div>
+    <div class="ups-overview-topline">
+      <div><span>{{tr .Language "ups.overview.mode"}}</span><strong data-live="overview-mode">{{.Overview.Mode}}</strong></div>
+      <div><span>{{tr .Language "ups.voltage"}}</span><strong data-live="voltage">{{.Overview.Voltage}}</strong></div>
+      <div><span>{{tr .Language "ups.power"}}</span><strong data-live="overview-power">{{.Overview.Power}}</strong></div>
+      <div><span>{{tr .Language "ups.output_voltage"}}</span><strong data-live="output-voltage">{{.Overview.OutputVoltage}}</strong></div>
+    </div>
+  </div>
+  <div class="ups-overview-meter" aria-label="{{tr .Language "ups.overview.charge"}}">
+    <div class="ups-overview-meter-fill"></div>
+  </div>
+  <p class="ups-overview-summary" data-live="overview-summary">{{.Overview.Summary}}</p>
+  <div class="ups-overview-metrics">
+    <div class="ups-overview-metric"><span>{{tr .Language "ups.overview.mains"}}</span><strong data-live="overview-mains">{{.Overview.Mains}}</strong></div>
+    <div class="ups-overview-metric"><span>{{tr .Language "ups.current"}}</span><strong data-live="overview-current">{{.Overview.Current}}</strong></div>
+    <div class="ups-overview-metric"><span>{{tr .Language "ups.overview.load"}}</span><strong data-live="overview-load">{{.Overview.Load}}</strong></div>
+    <div class="ups-overview-metric"><span>{{tr .Language "ups.overview.route"}}</span><strong data-live="overview-route">{{.Overview.Route}}</strong></div>
+    <div class="ups-overview-metric"><span>{{tr .Language "ups.output_current"}}</span><strong data-live="overview-output-current">{{.Overview.OutputCurrent}}</strong></div>
+    <div class="ups-overview-metric"><span>{{tr .Language "ups.output_power"}}</span><strong data-live="overview-output-power">{{.Overview.OutputPower}}</strong></div>
+  </div>
+</div>
+{{end}}
+
+{{define "dashboard_widget_sensor"}}
+<div class="card dashboard-widget-card" data-dashboard-widget="{{.ID}}">
+  <span class="dashboard-widget-label">{{.Label}}</span>
+  <strong class="dashboard-widget-value" data-live="{{.LiveKey}}">{{.Value}}</strong>
+</div>
+{{end}}
+
+{{define "dashboard_widget_status"}}
+<div class="card dashboard-widget-card" data-dashboard-widget="{{.ID}}">
+  <span class="dashboard-widget-label">{{.Label}}</span>
+  <strong class="dashboard-widget-value" data-live="{{.LiveKey}}">{{.Value}}</strong>
+  <span class="dashboard-widget-detail" data-live="{{.DetailLiveKey}}">{{.Detail}}</span>
+</div>
+{{end}}

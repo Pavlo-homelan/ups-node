@@ -5,8 +5,8 @@ After=network.target
 
 [Service]
 Type=simple
-DynamicUser=yes
-SupplementaryGroups=www-data
+User=www-data
+Group=www-data
 UMask=0007
 RuntimeDirectory=ups-pi-node-web
 RuntimeDirectoryMode=0755
@@ -35,7 +35,7 @@ LockPersonality=yes
 MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 RestrictAddressFamilies=AF_UNIX
-ReadWritePaths=/run/ups-pi-node-web
+ReadWritePaths=/run/ups-pi-node-web /etc/ups-pi-node /var/lib/ups-pi-node
 
 [Install]
 WantedBy=multi-user.target

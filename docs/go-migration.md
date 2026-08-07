@@ -145,12 +145,12 @@ available through the Go service or intentionally removed from both runtimes:
    `/api/integrations/zabbix/<metric>`, and
    `/api/integrations/home-assistant`, including the optional
    `X-UPS-PI-NODE-Token` / `token` access gate.
-2. **System settings.** Move load timeout, UI language, hotspot SSID/password,
-   and persisted INI writes from Flask to authenticated Go handlers.
-3. **Dashboard widgets.** Preserve the built-in widget list, active widget
+2. **System settings.** Moved load timeout, UI language, hotspot SSID/password,
+   and persisted INI writes to authenticated Go handlers.
+3. **Dashboard widgets.** Preserved the built-in widget list, active widget
    layout, add/remove actions, and safe persistence under
    `/var/lib/ups-pi-node`.
-4. **Custom widget packages.** Preserve ZIP upload, manifest validation,
+4. **Custom widget packages.** Preserved ZIP upload, manifest validation,
    CSS/asset/font serving, size limits, path traversal checks, delete, and
    ownership expectations.
 5. **UI parity and copy hygiene.** Keep labels short and technical. The Go UI
@@ -173,6 +173,21 @@ available through the Go service or intentionally removed from both runtimes:
 - Deleting unrelated NetworkManager profiles.
 - Moving animation rendering into the Raspberry Pi backend.
 - Changing the verified INA3221, GPIO, or ST7735 wiring.
+
+## 2026-08-07 web UI parity checkpoint
+
+- The Go web service restores Flask-era `/wifi` and `/system` pages and the
+  UPS/Wi-Fi/System navigation tabs.
+- Authenticated Go handlers now persist UI language, hotspot SSID/password,
+  and load timeout settings back to the shared INI file.
+- Go preserves dashboard widget add/remove state in the existing
+  `dashboard-widgets.json` format.
+- Go restores custom UPS widget ZIP install/delete and static serving for
+  widget CSS/assets from the existing widgets directory.
+- `/api/data` is available again for Flask-compatible live widget updates.
+- The Go web unit runs as `www-data` with explicit write access to
+  `/etc/ups-pi-node` and `/var/lib/ups-pi-node`, matching the restored write
+  requirements while keeping hardware access behind the helper socket.
 
 ## 2026-07-18 implementation checkpoint
 

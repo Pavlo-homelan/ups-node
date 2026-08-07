@@ -1,12 +1,17 @@
 package webapp
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -22,6 +27,26 @@ func testServer(t *testing.T) (*Server, *fakeHelper) {
 
 func testServerWithConfig(t *testing.T, config Config) (*Server, *fakeHelper) {
 	t.Helper()
+	directory := t.TempDir()
+	if config.ConfigPath == "" {
+		config.ConfigPath = filepath.Join(directory, "main.conf")
+		if err := os.WriteFile(config.ConfigPath, []byte(
+			"[integrations]\nnode_id = "+config.NodeID+"\n\n"+
+				"[system]\nhelper_socket = "+config.HelperSocket+"\n\n"+
+				"[wifi]\ninterface = "+config.WiFiInterface+"\nhotspot_connection = "+config.HotspotConnection+"\nhotspot_ssid = "+config.HotspotSSID+"\nhotspot_password = "+config.HotspotPassword+"\nipv6 = "+config.WiFiIPv6+"\nportal_mode = "+config.PortalMode+"\n\n"+
+				"[auth]\nmode = "+config.AuthMode+"\npam_service = "+config.PAMService+"\n\n"+
+				"[load]\ntimeout_1 = 30\ntimeout_2 = 300\n\n"+
+				"[ui]\nlanguage = "+config.Language+"\n",
+		), 0o660); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if config.WidgetsDir == DefaultConfig().WidgetsDir {
+		config.WidgetsDir = filepath.Join(directory, "widgets")
+	}
+	if config.DashboardWidgets == DefaultConfig().DashboardWidgets {
+		config.DashboardWidgets = filepath.Join(directory, "dashboard-widgets.json")
+	}
 	helper := &fakeHelper{}
 	server, err := NewServer(config, helper, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
@@ -91,6 +116,63 @@ func loginSession(t *testing.T, server *Server) (*http.Cookie, *http.Cookie) {
 	return nil, nil
 }
 
+func postForm(t *testing.T, server *Server, session *http.Cookie, csrfCookie *http.Cookie, path string, values url.Values) {
+	t.Helper()
+	if values == nil {
+		values = url.Values{}
+	}
+	values.Set("csrf_token", csrfCookie.Value)
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("%s response = %d %s", path, recorder.Code, recorder.Body.String())
+	}
+}
+
+func widgetUploadBody(t *testing.T, csrf string) (*bytes.Reader, string) {
+	t.Helper()
+	var archive bytes.Buffer
+	zipWriter := zip.NewWriter(&archive)
+	widgetJSON, err := zipWriter.Create("widget.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := widgetJSON.Write([]byte(`{"id":"my-widget","name":"My Widget","stylesheet":"style.css"}`)); err != nil {
+		t.Fatal(err)
+	}
+	styleCSS, err := zipWriter.Create("style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := styleCSS.Write([]byte(".ups-widget { border-color: #4caf50; }\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("csrf_token", csrf); err != nil {
+		t.Fatal(err)
+	}
+	part, err := writer.CreateFormFile("widget_file", "my-widget.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(archive.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return bytes.NewReader(body.Bytes()), writer.FormDataContentType()
+}
+
 func TestProtectedDashboardAndAPIRequireSignedSession(t *testing.T) {
 	server, _ := testServer(t)
 	request := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
@@ -117,8 +199,9 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	server.Handler().ServeHTTP(recorder, request)
 	body := recorder.Body.String()
-	if recorder.Code != http.StatusOK || !strings.Contains(body, "Акумулятор") ||
-		!strings.Contains(body, "Вихід 19 В") || !strings.Contains(body, "MyRouter") {
+	if recorder.Code != http.StatusOK || !strings.Contains(body, `href="/wifi"`) ||
+		!strings.Contains(body, `href="/system"`) || !strings.Contains(body, "Живлення") ||
+		!strings.Contains(body, "Батарея") {
 		t.Fatalf("dashboard response = %d", recorder.Code)
 	}
 	for _, phrase := range []string{
@@ -156,6 +239,139 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	server.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "MyRouter") {
 		t.Fatalf("CSRF mutation response = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestWiFiAndSystemPagesRestoreFlaskNavigation(t *testing.T) {
+	server, _ := testServer(t)
+	session, csrfCookie := loginSession(t, server)
+
+	for _, item := range []struct {
+		path string
+		want []string
+	}{
+		{"/wifi", []string{`href="/dashboard"`, `href="/system"`, "Поточна мережа", "MyRouter"}},
+		{"/system", []string{`href="/dashboard"`, `href="/wifi"`, "Віджет UPS", "Віджети головної сторінки", "Таймаути"}},
+	} {
+		request := httptest.NewRequest(http.MethodGet, item.path, nil)
+		request.AddCookie(session)
+		request.AddCookie(csrfCookie)
+		recorder := httptest.NewRecorder()
+		server.Handler().ServeHTTP(recorder, request)
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s response = %d", item.path, recorder.Code)
+		}
+		for _, want := range item.want {
+			if !strings.Contains(body, want) {
+				t.Fatalf("%s does not contain %q", item.path, want)
+			}
+		}
+	}
+}
+
+func TestSystemFormsPersistPythonSettings(t *testing.T) {
+	server, _ := testServer(t)
+	session, csrfCookie := loginSession(t, server)
+
+	postForm(t, server, session, csrfCookie, "/system/language", url.Values{"language": {"en"}})
+	if config := server.configSnapshot(); config.Language != "en" {
+		t.Fatalf("language = %q", config.Language)
+	}
+
+	postForm(t, server, session, csrfCookie, "/system/hotspot", url.Values{
+		"hotspot_ssid": {"NodeAP"}, "hotspot_password": {"123456789"},
+	})
+	postForm(t, server, session, csrfCookie, "/system", url.Values{
+		"timeout_1": {"45"}, "timeout_2": {"600"},
+	})
+
+	config := server.configSnapshot()
+	if config.HotspotSSID != "NodeAP" || config.HotspotPassword != "123456789" ||
+		config.LoadTimeout1 != 45 || config.LoadTimeout2 != 600 {
+		t.Fatalf("updated config = %#v", config)
+	}
+	contents, err := os.ReadFile(config.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"language = en", "hotspot_ssid = NodeAP", "hotspot_password = 123456789",
+		"timeout_1 = 45", "timeout_2 = 600",
+	} {
+		if !strings.Contains(string(contents), want) {
+			t.Fatalf("config file does not contain %q:\n%s", want, contents)
+		}
+	}
+}
+
+func TestDashboardWidgetManagerRoutesPersistLayout(t *testing.T) {
+	server, _ := testServer(t)
+	session, csrfCookie := loginSession(t, server)
+
+	postForm(t, server, session, csrfCookie, "/system/dashboard-widgets/cpu-temp/add", nil)
+	request := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Температура CPU") {
+		t.Fatalf("dashboard after add = %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	postForm(t, server, session, csrfCookie, "/system/dashboard-widgets/ups-main/remove", nil)
+	contents, err := os.ReadFile(server.configSnapshot().DashboardWidgets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(contents), "ups-main") || !strings.Contains(string(contents), "cpu-temp") {
+		t.Fatalf("layout file = %s", contents)
+	}
+}
+
+func TestWidgetUploadServeAndDelete(t *testing.T) {
+	server, _ := testServer(t)
+	session, csrfCookie := loginSession(t, server)
+	body, contentType := widgetUploadBody(t, csrfCookie.Value)
+	request := httptest.NewRequest(http.MethodPost, "/system/widgets", body)
+	request.Header.Set("Content-Type", contentType)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("upload response = %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/widgets/user-my-widget/style.css", nil)
+	recorder = httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), ".ups-widget") {
+		t.Fatalf("widget CSS response = %d %s", recorder.Code, recorder.Body.String())
+	}
+
+	postForm(t, server, session, csrfCookie, "/system/widgets/user-my-widget/delete", nil)
+	request = httptest.NewRequest(http.MethodGet, "/widgets/user-my-widget/style.css", nil)
+	recorder = httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("deleted widget CSS response = %d", recorder.Code)
+	}
+}
+
+func TestLegacyAPIDataShapeMatchesFlaskWidgets(t *testing.T) {
+	server, _ := testServer(t)
+	session, csrfCookie := loginSession(t, server)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/data", nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(body, `"connected_ssid_label":"MyRouter"`) ||
+		!strings.Contains(body, `"output_voltage_label":"18.96V"`) {
+		t.Fatalf("legacy API response = %d %s", recorder.Code, body)
 	}
 }
 

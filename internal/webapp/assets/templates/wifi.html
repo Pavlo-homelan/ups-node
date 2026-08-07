@@ -1,0 +1,62 @@
+{{define "wifi.html"}}<!doctype html>
+<html lang="{{.Language}}">
+<head>
+  {{template "app_head" .}}
+  <title>{{tr .Language "wifi.title"}} · {{.NodeID}}</title>
+</head>
+<body class="app-page">
+  {{template "page_header" .}}
+  <div class="container">
+    <div class="card">
+      <h2>{{tr .Language "wifi.title"}}</h2>
+      {{template "flash_messages" .}}
+
+      <p class="wifi-current">{{tr .Language "wifi.current"}}: <b>{{.PortalStatus.ConnectedSSIDLabel}}</b></p>
+      <dl class="network-details">
+        <div><dt>IP</dt><dd>{{.PortalStatus.IPAddressLabel}}</dd></div>
+        <div><dt>Mode</dt><dd>{{.PortalStatus.PortalModeLabel}}</dd></div>
+        <div><dt>Interface</dt><dd>{{.PortalStatus.Interface}}</dd></div>
+      </dl>
+
+      <form class="wifi-scan-form" method="get" action="/wifi">
+        <button type="submit" name="scan" value="1">{{tr .Language "wifi.scan"}}</button>
+      </form>
+
+      <form class="wifi-connect-form" method="post" action="/wifi/connect">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        {{if .ScanResult.Networks}}
+          <div class="network-window" role="radiogroup" aria-label="{{tr .Language "wifi.networks_label"}}">
+            {{range $index, $network := .ScanResult.Networks}}
+              <label class="network-row{{if $network.Connected}} connected{{end}}">
+                <input
+                  type="radio"
+                  name="ssid"
+                  value="{{$network.SSID}}"
+                  {{if or $network.Connected (eq $index 0)}}checked{{end}}
+                  required
+                >
+                <span class="network-main">
+                  <span class="network-name">
+                    {{$network.SSID}}
+                    {{if $network.Connected}}<span class="network-connected">{{tr $.Language "wifi.connected"}}</span>{{end}}
+                  </span>
+                  <span class="network-security">{{$network.SecurityLabel}}</span>
+                </span>
+                <span class="network-signal">{{$network.Signal}}%</span>
+              </label>
+            {{end}}
+          </div>
+        {{else}}
+          <div class="network-window empty">
+            <div class="network-empty">{{tr .Language "wifi.no_networks"}}</div>
+          </div>
+        {{end}}
+        <input type="password" name="password" placeholder="{{tr .Language "wifi.password"}}" autocomplete="new-password">
+        <button type="submit" {{if not .ScanResult.Networks}}disabled{{end}}>{{tr .Language "wifi.connect"}}</button>
+      </form>
+    </div>
+  </div>
+  {{template "page_footer" .}}
+  {{template "app_scripts" .}}
+</body>
+</html>{{end}}

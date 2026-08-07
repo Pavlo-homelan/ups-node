@@ -48,11 +48,44 @@ func run() error {
 	if token := os.Getenv("UPS_PI_NODE_INTEGRATIONS_TOKEN"); token != "" {
 		config.IntegrationsToken = token
 	}
+	if nodeID := os.Getenv("UPS_PI_NODE_NODE_ID"); nodeID != "" {
+		config.NodeID = nodeID
+	}
+	if helperSocket := os.Getenv("UPS_PI_NODE_SYSTEM_HELPER_SOCKET"); helperSocket != "" {
+		config.HelperSocket = helperSocket
+	}
+	if interfaceName := os.Getenv("UPS_PI_NODE_WIFI_INTERFACE"); interfaceName != "" {
+		config.WiFiInterface = interfaceName
+	}
+	if hotspotConnection := os.Getenv("UPS_PI_NODE_HOTSPOT_CONNECTION_NAME"); hotspotConnection != "" {
+		config.HotspotConnection = hotspotConnection
+	}
+	if hotspotSSID := os.Getenv("UPS_PI_NODE_HOTSPOT_SSID"); hotspotSSID != "" {
+		config.HotspotSSID = hotspotSSID
+	}
+	if hotspotPassword := os.Getenv("UPS_PI_NODE_HOTSPOT_PASSWORD"); hotspotPassword != "" {
+		config.HotspotPassword = hotspotPassword
+	}
+	if portalMode := os.Getenv("UPS_PI_NODE_PORTAL_MODE"); portalMode != "" {
+		config.PortalMode = portalMode
+	}
 	if ipv6Mode := os.Getenv("UPS_PI_NODE_WIFI_IPV6"); ipv6Mode != "" {
 		config.WiFiIPv6 = webapp.NormalizeWiFiIPv6Mode(ipv6Mode)
 	}
-	config.PortalUsername = os.Getenv("UPS_PI_NODE_USERNAME")
-	config.PortalPassword = os.Getenv("UPS_PI_NODE_PASSWORD")
+	if authMode := os.Getenv("UPS_PI_NODE_AUTH_MODE"); authMode != "" {
+		config.AuthMode = authMode
+	}
+	if pamService := os.Getenv("UPS_PI_NODE_PAM_SERVICE"); pamService != "" {
+		config.PAMService = pamService
+	}
+	config.PortalUsername = firstNonEmpty(os.Getenv("UPS_PI_NODE_PORTAL_USERNAME"), os.Getenv("UPS_PI_NODE_USERNAME"))
+	config.PortalPassword = firstNonEmpty(os.Getenv("UPS_PI_NODE_PORTAL_PASSWORD"), os.Getenv("UPS_PI_NODE_PASSWORD"))
+	if widgetsDir := os.Getenv("UPS_PI_NODE_WIDGETS_DIR"); widgetsDir != "" {
+		config.WidgetsDir = widgetsDir
+	}
+	if dashboardWidgets := os.Getenv("UPS_PI_NODE_DASHBOARD_WIDGETS_FILE"); dashboardWidgets != "" {
+		config.DashboardWidgets = dashboardWidgets
+	}
 	config.SecureCookies = secureCookies
 	config.AllowInsecureAuth = allowInsecureAuth
 	if helperSocket != "" {
@@ -101,4 +134,13 @@ func run() error {
 		}
 		return err
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

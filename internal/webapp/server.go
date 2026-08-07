@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"ups-pi-node/internal/helperclient"
@@ -24,9 +25,12 @@ var webAssets embed.FS
 type Server struct {
 	config       Config
 	helper       helperclient.Caller
+	configMu     sync.RWMutex
 	security     *security
 	auth         authenticator
 	hub          *statusHub
+	widgets      widgetManager
+	dashboard    dashboardWidgetManager
 	templates    *template.Template
 	handler      http.Handler
 	loginLimiter *attemptWindow
@@ -35,12 +39,32 @@ type Server struct {
 }
 
 type pageData struct {
-	Language      string
-	NodeID        string
-	Username      string
-	CSRF          string
-	Error         string
-	InitialStatus string
+	Language               string
+	NodeID                 string
+	Username               string
+	CSRF                   string
+	Error                  string
+	InitialStatus          string
+	ActivePage             string
+	Flash                  []flashMessage
+	SupportedLanguages     []languageOption
+	WidgetStyleOptions     []widgetStyle
+	CustomWidgetStyles     []widgetStyle
+	WidgetStyleOptionsJSON template.JS
+	ClientI18NJSON         template.JS
+	PortalStatus           portalStatusView
+	ScanResult             wifiScanView
+	Timeout1               int
+	Timeout2               int
+	HotspotSSID            string
+	HotspotPassword        string
+	WiFiIPv6               string
+	AuthMode               string
+	HelperSocket           string
+	StatusInterval         string
+	DashboardWidgets       []dashboardWidgetView
+	ActiveDashboardWidgets []dashboardWidget
+	AvailableWidgets       []dashboardWidget
 }
 
 func NewServer(config Config, helper helperclient.Caller, logger *slog.Logger) (*Server, error) {
@@ -53,14 +77,17 @@ func NewServer(config Config, helper helperclient.Caller, logger *slog.Logger) (
 	if logger == nil {
 		logger = slog.Default()
 	}
-	templates, err := template.ParseFS(webAssets, "assets/templates/*.html")
+	templates, err := template.New("").Funcs(template.FuncMap{
+		"tr": translate,
+	}).ParseFS(webAssets, "assets/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse embedded web templates: %w", err)
 	}
 	server := &Server{
 		config: config, helper: helper, security: newSecurity(config),
 		auth: authenticator{config: config, helper: helper},
-		hub:  newStatusHub(config, helper), templates: templates,
+		hub:  newStatusHub(config, helper), widgets: newWidgetManager(config.WidgetsDir),
+		dashboard: newDashboardWidgetManager(config.DashboardWidgets), templates: templates,
 		loginLimiter: newAttemptWindow(), streams: newStreamLimiter(16, 2), logger: logger,
 	}
 	handler, err := server.routes()
@@ -89,7 +116,20 @@ func (server *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("POST /login", server.handleLogin)
 	mux.HandleFunc("POST /logout", server.requirePage(server.handleLogout))
 	mux.HandleFunc("GET /dashboard", server.requirePage(server.handleDashboard))
+	mux.HandleFunc("GET /wifi", server.requirePage(server.handleWiFiPage))
+	mux.HandleFunc("POST /wifi/connect", server.requirePage(server.handleWiFiConnectForm))
+	mux.HandleFunc("GET /system", server.requirePage(server.handleSystemPage))
+	mux.HandleFunc("POST /system", server.requirePage(server.handleSystemTimeouts))
+	mux.HandleFunc("POST /system/language", server.requirePage(server.handleSystemLanguage))
+	mux.HandleFunc("POST /system/hotspot", server.requirePage(server.handleSystemHotspot))
+	mux.HandleFunc("POST /system/widgets", server.requirePage(server.handleWidgetUpload))
+	mux.HandleFunc("POST /system/widgets/{style}/delete", server.requirePage(server.handleWidgetDelete))
+	mux.HandleFunc("POST /system/dashboard-widgets/{widget}/add", server.requirePage(server.handleDashboardWidgetAdd))
+	mux.HandleFunc("POST /system/dashboard-widgets/{widget}/remove", server.requirePage(server.handleDashboardWidgetRemove))
+	mux.HandleFunc("GET /widgets/{style}/{filename...}", server.handleWidgetFile)
+	mux.HandleFunc("GET /widgets/{filename}", server.handleWidgetCSS)
 	mux.HandleFunc("GET /api/v1/status", server.requireAPI(server.handleStatus))
+	mux.HandleFunc("GET /api/data", server.requireAPI(server.handleAPIData))
 	mux.HandleFunc("GET /api/v1/events", server.requireAPI(server.handleEvents))
 	mux.HandleFunc("POST /api/v1/wifi/scan", server.requireAPI(server.requireCSRF(server.handleWiFiScan)))
 	mux.HandleFunc("POST /api/v1/wifi/connect", server.requireAPI(server.requireCSRF(server.handleWiFiConnect)))
@@ -98,6 +138,7 @@ func (server *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("GET /api/integrations/zabbix/discovery", server.handleZabbixDiscovery)
 	mux.HandleFunc("GET /api/integrations/zabbix/{metric}", server.handleZabbixMetric)
 	mux.HandleFunc("GET /api/integrations/home-assistant", server.handleHomeAssistantDiscovery)
+	mux.HandleFunc("GET /health", server.requireAPI(server.handleAPIData))
 	mux.HandleFunc("GET /healthz", server.handleHealth)
 	return mux, nil
 }
@@ -168,30 +209,14 @@ func (server *Server) renderLogin(w http.ResponseWriter, r *http.Request, messag
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
+	config := server.configSnapshot()
 	_ = server.templates.ExecuteTemplate(w, "login.html", pageData{
-		Language: server.config.Language, NodeID: server.config.NodeID, CSRF: csrf, Error: message,
+		Language: config.Language, NodeID: config.NodeID, CSRF: csrf, Error: message,
 	})
 }
 
 func (server *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	claims, _ := server.security.session(r)
-	csrf, err := server.security.csrfFor(w, r)
-	if err != nil {
-		http.Error(w, "CSRF unavailable", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	initialStatus := "{}"
-	if status, ok := server.hub.Current(); ok {
-		if encoded, encodeErr := json.Marshal(status); encodeErr == nil {
-			initialStatus = string(encoded)
-		}
-	}
-	_ = server.templates.ExecuteTemplate(w, "dashboard.html", pageData{
-		Language: server.config.Language, NodeID: server.config.NodeID,
-		Username: claims.Username, CSRF: csrf, InitialStatus: initialStatus,
-	})
+	server.renderDashboardPage(w, r)
 }
 
 func (server *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -257,10 +282,11 @@ func (server *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (server *Server) handleWiFiScan(w http.ResponseWriter, r *http.Request) {
+	config := server.configSnapshot()
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 	var result map[string]any
-	err := server.helper.Call(ctx, "wifi.scan", map[string]any{"interface": server.config.WiFiInterface}, &result)
+	err := server.helper.Call(ctx, "wifi.scan", map[string]any{"interface": config.WiFiInterface}, &result)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -269,6 +295,7 @@ func (server *Server) handleWiFiScan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (server *Server) handleWiFiConnect(w http.ResponseWriter, r *http.Request) {
+	config := server.configSnapshot()
 	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
 	var request struct {
 		SSID     string `json:"ssid"`
@@ -286,8 +313,8 @@ func (server *Server) handleWiFiConnect(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	var result map[string]any
 	err := server.helper.Call(ctx, "wifi.connect", map[string]any{
-		"interface": server.config.WiFiInterface, "ssid": strings.TrimSpace(request.SSID),
-		"password": request.Password, "hidden": request.Hidden, "ipv6": server.config.WiFiIPv6,
+		"interface": config.WiFiInterface, "ssid": strings.TrimSpace(request.SSID),
+		"password": request.Password, "hidden": request.Hidden, "ipv6": config.WiFiIPv6,
 	}, &result)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})

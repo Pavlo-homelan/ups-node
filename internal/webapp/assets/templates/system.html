@@ -1,0 +1,125 @@
+{{define "system.html"}}<!doctype html>
+<html lang="{{.Language}}">
+<head>
+  {{template "app_head" .}}
+  <title>{{tr .Language "system.title"}} · {{.NodeID}}</title>
+</head>
+<body class="app-page">
+  {{template "page_header" .}}
+  <div class="container">
+    <div class="card">
+      <h2>{{tr .Language "system.title"}}</h2>
+      {{template "flash_messages" .}}
+
+      <div class="system-section-title">{{tr .Language "system.theme"}}</div>
+      <div class="theme-switch" aria-label="{{tr .Language "system.theme"}}">
+        <label class="theme-option">
+          <input type="radio" name="theme" value="dark" data-theme-option>
+          <span>{{tr .Language "system.theme.dark"}}</span>
+        </label>
+        <label class="theme-option">
+          <input type="radio" name="theme" value="light" data-theme-option>
+          <span>{{tr .Language "system.theme.light"}}</span>
+        </label>
+      </div>
+
+      <div class="system-section-title">{{tr .Language "system.language"}}</div>
+      <form class="language-form" method="post" action="/system/language">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <select class="language-select" name="language" aria-label="{{tr .Language "system.language"}}">
+          {{range .SupportedLanguages}}
+            <option value="{{.Code}}" {{if eq .Code $.Language}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+        <button type="submit">{{tr .Language "system.language_apply"}}</button>
+      </form>
+
+      <div class="system-section-title">{{tr .Language "system.hotspot"}}</div>
+      <form method="post" action="/system/hotspot">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="text" name="hotspot_ssid" maxlength="32" value="{{.HotspotSSID}}" placeholder="{{tr .Language "system.hotspot_ssid"}}" required>
+        <input type="password" name="hotspot_password" minlength="8" maxlength="63" value="{{.HotspotPassword}}" placeholder="{{tr .Language "system.hotspot_password"}}" autocomplete="new-password" required>
+        <button type="submit">{{tr .Language "system.hotspot_save"}}</button>
+      </form>
+
+      <div class="system-section-title">{{tr .Language "system.widget"}}</div>
+      <select class="widget-style-select" name="widget_style" data-widget-style-select aria-label="{{tr .Language "system.widget"}}">
+        <optgroup label="{{tr .Language "system.widget_builtin"}}">
+          {{range .WidgetStyleOptions}}
+            {{if not .Custom}}<option value="{{.ID}}">{{.Label}}</option>{{end}}
+          {{end}}
+        </optgroup>
+        {{if .CustomWidgetStyles}}
+          <optgroup label="{{tr .Language "system.widget_custom"}}">
+            {{range .CustomWidgetStyles}}
+              <option value="{{.ID}}">{{.Label}}</option>
+            {{end}}
+          </optgroup>
+        {{end}}
+      </select>
+
+      <form class="widget-upload-form" method="post" action="/system/widgets" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="file" name="widget_file" accept=".zip,application/zip,application/x-zip-compressed" required>
+        <button type="submit">{{tr .Language "system.widget_install"}}</button>
+      </form>
+
+      {{if .CustomWidgetStyles}}
+        <div class="widget-list">
+          {{range .CustomWidgetStyles}}
+            <div class="widget-list-row">
+              <span>
+                {{.Label}}
+                {{if or .Version .Author}}<small>{{.Version}}{{if and .Version .Author}} · {{end}}{{.Author}}</small>{{end}}
+              </span>
+              <form method="post" action="/system/widgets/{{.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <button class="secondary-button widget-delete" type="submit">{{tr $.Language "system.widget_delete"}}</button>
+              </form>
+            </div>
+          {{end}}
+        </div>
+      {{end}}
+
+      <div class="system-section-title">{{tr .Language "system.dashboard_widgets"}}</div>
+      <div class="widget-list dashboard-widget-manager">
+        {{range .ActiveDashboardWidgets}}
+          <div class="widget-list-row">
+            <span>{{tr $.Language .LabelKey}}</span>
+            <form method="post" action="/system/dashboard-widgets/{{.ID}}/remove">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button class="secondary-button widget-delete" type="submit">{{tr $.Language "system.widget_remove"}}</button>
+            </form>
+          </div>
+        {{else}}
+          <p class="system-empty-note">{{tr $.Language "system.dashboard_widgets_empty"}}</p>
+        {{end}}
+      </div>
+
+      {{if .AvailableWidgets}}
+        <div class="widget-list dashboard-widget-manager">
+          {{range .AvailableWidgets}}
+            <div class="widget-list-row">
+              <span>{{tr $.Language .LabelKey}}</span>
+              <form method="post" action="/system/dashboard-widgets/{{.ID}}/add">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <button class="secondary-button widget-add" type="submit">{{tr $.Language "system.widget_add"}}</button>
+              </form>
+            </div>
+          {{end}}
+        </div>
+      {{end}}
+
+      <div class="system-section-title">{{tr .Language "system.timeouts"}}</div>
+      <form method="post" action="/system">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <input type="number" name="timeout_1" min="1" max="3600" value="{{.Timeout1}}" placeholder="{{tr .Language "system.timeout_1"}}">
+        <input type="number" name="timeout_2" min="1" max="3600" value="{{.Timeout2}}" placeholder="{{tr .Language "system.timeout_2"}}">
+        <button type="submit">{{tr .Language "system.save"}}</button>
+      </form>
+    </div>
+  </div>
+  {{template "page_footer" .}}
+  {{template "app_scripts" .}}
+</body>
+</html>{{end}}

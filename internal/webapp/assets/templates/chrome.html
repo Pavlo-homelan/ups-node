@@ -1,0 +1,52 @@
+{{define "app_head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{.CSRF}}">
+<script>
+try {
+  document.documentElement.dataset.theme = localStorage.getItem("ups-pi-node-theme") || "dark";
+  document.documentElement.dataset.widgetStyle = localStorage.getItem("ups-pi-node-widget-style") || "neon";
+} catch (error) {
+  document.documentElement.dataset.theme = "dark";
+  document.documentElement.dataset.widgetStyle = "neon";
+}
+</script>
+<link rel="stylesheet" href="/assets/css/flask.css">
+{{end}}
+
+{{define "page_header"}}
+<header class="page-header">
+  <a class="page-brand" href="/dashboard">
+    <span class="page-brand-main">{{.NodeID}}</span>
+  </a>
+  <div class="page-tabs">
+    <nav class="tabs" aria-label="Sections">
+      <a class="tab-link{{if eq .ActivePage "ups"}} active{{end}}" href="/dashboard">{{tr .Language "tab.ups"}}</a>
+      <a class="tab-link{{if eq .ActivePage "wifi"}} active{{end}}" href="/wifi">{{tr .Language "tab.wifi"}}</a>
+      <a class="tab-link{{if eq .ActivePage "system"}} active{{end}}" href="/system">{{tr .Language "tab.system"}}</a>
+    </nav>
+  </div>
+  <div class="header-actions">
+    <span class="header-user">{{.Username}}</span>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <button class="header-logout" type="submit">{{tr .Language "header.logout"}}</button>
+    </form>
+  </div>
+</header>
+{{end}}
+
+{{define "flash_messages"}}
+{{range .Flash}}
+  <p class="{{if eq .Kind "error"}}error{{else}}form-message{{end}}">{{.Text}}</p>
+{{end}}
+{{end}}
+
+{{define "page_footer"}}{{end}}
+
+{{define "app_scripts"}}
+<script type="application/json" id="widget-style-options">{{.WidgetStyleOptionsJSON}}</script>
+<script type="application/json" id="i18n-messages">{{.ClientI18NJSON}}</script>
+<script src="/assets/js/theme.js"></script>
+<script src="/assets/js/main.js"></script>
+{{end}}
