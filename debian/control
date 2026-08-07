@@ -2,11 +2,12 @@ Source: ups-pi-node
 Section: net
 Priority: optional
 Maintainer: Pavlo <pavlo@example.com>
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 13),
+               golang-go:native (>= 2:1.23~)
 Standards-Version: 4.6.2
 
 Package: ups-pi-node
-Architecture: all
+Architecture: any
 Depends: ${misc:Depends},
          python3 (>= 3.11),
          python3-venv,
@@ -18,9 +19,12 @@ Depends: ${misc:Depends},
          fonts-ubuntu,
          nginx,
          network-manager,
-         python3-pam
+         python3-pam,
+         pamtester,
+         curl
 Description: Web portal for Raspberry Pi UPS node management
- Flask web portal for managing a UPS module on a Raspberry Pi node.
+ Go web portal with a retained Python rollback runtime for managing a UPS
+ module on a Raspberry Pi node.
  Provides Wi-Fi management, UPS monitoring and load control
  via a mobile-friendly dark dashboard.
  .

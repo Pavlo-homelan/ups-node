@@ -3,6 +3,7 @@ set -euo pipefail
 
 src="${1:?source directory is required}"
 out="${2:?output directory is required}"
+target_arch="${UPS_PI_NODE_DEB_ARCH:-armhf}"
 src="$(cd "$src" && pwd)"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
@@ -39,10 +40,10 @@ else
     else
         build_revision=0
         shopt -s nullglob
-        for artifact in "$out"/ups-pi-node_"$upstream_version"-*_all.deb; do
+        for artifact in "$out"/ups-pi-node_"$upstream_version"-*_"$target_arch".deb; do
             filename="$(basename "$artifact")"
             artifact_version="${filename#ups-pi-node_}"
-            artifact_version="${artifact_version%_all.deb}"
+            artifact_version="${artifact_version%_${target_arch}.deb}"
             artifact_revision="${artifact_version##*-}"
             if [[ "$artifact_revision" =~ ^[0-9]+$ && "$artifact_revision" -gt "$build_revision" ]]; then
                 build_revision="$artifact_revision"
@@ -61,9 +62,10 @@ if [[ "$package_version" != "$base_version" ]]; then
 fi
 
 echo "Package version: $package_version"
-dpkg-buildpackage -b -us -uc
+echo "Package architecture: $target_arch"
+dpkg-buildpackage -b -us -uc -a "$target_arch"
 
-deb="$build_root/ups-pi-node_${package_version}_all.deb"
+deb="$build_root/ups-pi-node_${package_version}_${target_arch}.deb"
 if [[ ! -f "$deb" ]]; then
     echo "Expected package was not produced: $deb" >&2
     ls -la "$build_root" >&2

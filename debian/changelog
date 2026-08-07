@@ -1,3 +1,13 @@
+ups-pi-node (0.3.0) trixie; urgency=medium
+
+  * Add the root-owned Go helper with direct NetworkManager D-Bus access.
+  * Make managed Wi-Fi profiles idempotent and stabilize hotspot fallback.
+  * Move INA3221, GPIO relay control, and the ST7735 renderer to Go.
+  * Add a Go HTTP/SSE service and responsive animated power dashboard.
+  * Package both runtimes with transactional health-checked rollback.
+
+ -- Pavlo <pavlo@example.com>  Sun, 19 Jul 2026 13:00:00 +0300
+
 ups-pi-node (0.2.2) trixie; urgency=medium
 
   * Replace the INA219 current monitor backend with INA3221 channel support.

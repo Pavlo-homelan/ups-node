@@ -1,0 +1,6 @@
+# Go's cgo-disabled binaries are deliberately static so one armhf artifact can
+# run on the supported Raspberry Pi OS/Debian Trixie images without a libc ABI
+# coupling. They are built reproducibly from vendored source and stripped.
+ups-pi-node: statically-linked-binary [usr/lib/ups-pi-node/bin/ups-pi-node-helper-go]
+ups-pi-node: statically-linked-binary [usr/lib/ups-pi-node/bin/ups-pi-node-web-go]
+ups-pi-node: statically-linked-binary [usr/sbin/ups-pi-node-runtime]

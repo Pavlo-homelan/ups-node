@@ -2,6 +2,7 @@
 Description=ups-pi-node system helper
 After=NetworkManager.service
 Wants=NetworkManager.service
+Conflicts=ups-pi-node-helper-go.service
 
 [Service]
 Type=simple

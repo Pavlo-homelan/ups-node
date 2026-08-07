@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 APP_DIR="/usr/lib/ups-pi-node"
 VAR_DIR="/var/lib/ups-pi-node"
@@ -8,11 +9,38 @@ ENV_FILE="/etc/default/ups-pi-node"
 VENV_DIR="$VAR_DIR/.venv"
 WIDGETS_DIR="$VAR_DIR/widgets"
 DASHBOARD_WIDGETS_FILE="$VAR_DIR/dashboard-widgets.json"
+RUNTIME_FILE="$CONF_DIR/runtime"
 
 case "$1" in
     configure)
+		# Do not execute or mutate the legacy virtualenv while ownership is
+		# repaired. The selected helper is restored transactionally below.
+		deb-systemd-invoke stop ups-pi-node.service ups-pi-node-web-go.service \
+			ups-pi-node-helper.service ups-pi-node-helper-go.service \
+			ups-pi-node-helper-go-shadow.service >/dev/null || true
         mkdir -p "$CONF_DIR"
+		if [ -L "$WIDGETS_DIR" ]; then
+			echo "Refusing symlink at $WIDGETS_DIR" >&2
+			exit 1
+		fi
         mkdir -p "$WIDGETS_DIR"
+
+		if [ ! -f "$RUNTIME_FILE" ]; then
+			old_umask="$(umask)"
+			umask 022
+			printf 'python\n' > "$RUNTIME_FILE"
+			umask "$old_umask"
+		fi
+		chown root:root "$RUNTIME_FILE"
+		chmod 644 "$RUNTIME_FILE"
+		runtime_mode="$(tr -d '[:space:]' < "$RUNTIME_FILE")"
+		case "$runtime_mode" in
+			python|go) ;;
+			*)
+				echo "Invalid runtime in $RUNTIME_FILE: $runtime_mode" >&2
+				exit 1
+				;;
+		esac
 
         if [ ! -f "$ENV_FILE" ]; then
             secret_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
@@ -38,6 +66,8 @@ case "$1" in
                 printf 'UPS_PI_NODE_HOTSPOT_PASSWORD=12345678\n' >> "$ENV_FILE"
             fi
         fi
+		chown root:www-data "$ENV_FILE"
+		chmod 640 "$ENV_FILE"
 
         if [ ! -f "$CONF_DIR/main.conf" ]; then
             cp "$CONF_DIR/main.conf.example" "$CONF_DIR/main.conf"
@@ -117,6 +147,22 @@ EOF
             fi
         fi
 
+		if [ -L "$VENV_DIR" ] || { [ -e "$VENV_DIR" ] && [ ! -d "$VENV_DIR" ]; }; then
+			echo "Refusing unsafe virtualenv path: $VENV_DIR" >&2
+			exit 1
+		fi
+		if [ -d "$VENV_DIR" ] && [ -n "$(find "$VENV_DIR" -xdev \( -type f -o -type d \) \( ! -user root -o -perm /022 \) -print -quit)" ]; then
+			venv_backup="$VAR_DIR/.venv.pre-0.3.0"
+			if [ -e "$venv_backup" ] || [ -L "$venv_backup" ]; then
+				echo "Cannot quarantine writable virtualenv: $venv_backup already exists" >&2
+				exit 1
+			fi
+			mv "$VENV_DIR" "$venv_backup"
+			chown -R root:root "$venv_backup"
+			chmod -R go-rwx "$venv_backup"
+			echo "Quarantined web-writable virtualenv: $venv_backup"
+		fi
+
         if [ ! -d "$VENV_DIR" ]; then
             python3 -m venv "$VENV_DIR"
         elif [ -f "$VENV_DIR/pyvenv.cfg" ]; then
@@ -137,17 +183,28 @@ EOF
             "$VENV_DIR/bin/python" -c 'import flask, gunicorn' >/dev/null
         fi
 
-        chown -R root:root "$APP_DIR"
-        find "$APP_DIR" -type d -exec chmod 755 {} +
-        find "$APP_DIR" -type f -exec chmod 644 {} +
-        chown -R www-data:www-data "$VAR_DIR"
-        chmod 750 "$VAR_DIR" "$WIDGETS_DIR"
+		# The root helper executes this interpreter. Never let the web account
+		# replace packages or the interpreter inside the virtualenv.
+		chown -R root:root "$VENV_DIR"
+		chmod -R go-w "$VENV_DIR"
+		chown root:www-data "$VAR_DIR"
+		chmod 1770 "$VAR_DIR"
+		chown -R www-data:www-data "$WIDGETS_DIR"
+		chmod 750 "$WIDGETS_DIR"
+		if [ -L "$DASHBOARD_WIDGETS_FILE" ]; then
+			echo "Refusing symlink at $DASHBOARD_WIDGETS_FILE" >&2
+			exit 1
+		fi
+		if [ -f "$DASHBOARD_WIDGETS_FILE" ]; then
+			chown --no-dereference www-data:www-data "$DASHBOARD_WIDGETS_FILE"
+			chmod 640 "$DASHBOARD_WIDGETS_FILE"
+		fi
         chown root:www-data "$CONF_DIR/main.conf"
         chmod 660 "$CONF_DIR/main.conf"
 
         chmod +x /usr/bin/ups-pi-node-hotspot-fallback
         chmod +x /usr/bin/ups-pi-node-enable-buses
-        /usr/bin/ups-pi-node-enable-buses || true
+		ups-pi-node-enable-buses || true
 
         if [ -f /etc/nginx/sites-enabled/default ]; then
             rm -f /etc/nginx/sites-enabled/default
@@ -155,14 +212,11 @@ EOF
         ln -sf /etc/nginx/sites-available/ups-pi-node \
                /etc/nginx/sites-enabled/ups-pi-node
 
-        systemctl daemon-reload
-        systemctl enable ups-pi-node-helper.service
-        systemctl enable ups-pi-node.service
-        systemctl enable ups-pi-node-hotspot-fallback.timer
-        systemctl restart ups-pi-node-helper.service
-        systemctl restart ups-pi-node.service
-        systemctl restart ups-pi-node-hotspot-fallback.timer
-        systemctl reload nginx || true
+		deb-systemd-helper enable ups-pi-node-hotspot-fallback.timer >/dev/null || true
+		deb-systemd-invoke stop ups-pi-node-helper-go-shadow.service >/dev/null || true
+		deb-systemd-helper disable ups-pi-node-helper-go-shadow.service >/dev/null || true
+		ups-pi-node-runtime --timeout 90s apply "$runtime_mode"
+		deb-systemd-invoke restart ups-pi-node-hotspot-fallback.timer >/dev/null
         ;;
 esac
 

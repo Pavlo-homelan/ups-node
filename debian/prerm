@@ -1,16 +1,18 @@
 #!/bin/bash
 set -e
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 case "$1" in
-    remove|upgrade)
-        systemctl stop ups-pi-node.service || true
-        systemctl stop ups-pi-node-helper.service || true
-        systemctl stop ups-pi-node-hotspot-fallback.timer || true
-        systemctl disable ups-pi-node.service || true
-        systemctl disable ups-pi-node-helper.service || true
-        systemctl disable ups-pi-node-hotspot-fallback.timer || true
+    remove)
+		deb-systemd-invoke stop ups-pi-node.service ups-pi-node-helper.service \
+			ups-pi-node-web-go.service ups-pi-node-helper-go.service \
+			ups-pi-node-helper-go-shadow.service ups-pi-node-hotspot-fallback.timer || true
+		deb-systemd-helper disable ups-pi-node.service ups-pi-node-helper.service \
+			ups-pi-node-web-go.service ups-pi-node-helper-go.service \
+			ups-pi-node-helper-go-shadow.service ups-pi-node-hotspot-fallback.timer || true
         rm -f /etc/nginx/sites-enabled/ups-pi-node
-        systemctl reload nginx || true
+		rm -f /etc/nginx/snippets/ups-pi-node-runtime.conf
+		deb-systemd-invoke reload nginx.service || true
         ;;
 esac
 

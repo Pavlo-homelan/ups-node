@@ -1,16 +1,52 @@
 #!/usr/bin/make -f
 
+DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+GO_BUILD = CGO_ENABLED=0 GOOS=linux GOFLAGS=-mod=vendor
+
+ifeq ($(DEB_HOST_ARCH),armhf)
+GO_ARCH = GOARCH=arm GOARM=7
+else ifeq ($(DEB_HOST_ARCH),arm64)
+GO_ARCH = GOARCH=arm64
+else ifeq ($(DEB_HOST_ARCH),amd64)
+GO_ARCH = GOARCH=amd64
+else
+$(error Unsupported Debian host architecture: $(DEB_HOST_ARCH))
+endif
+
 %:
 	dh $@
 
 override_dh_auto_build:
-	# Python runtime dependencies are installed into the app venv in postinst.
+	mkdir -p _build
+	$(GO_BUILD) $(GO_ARCH) go build -mod=vendor -buildvcs=false -trimpath -ldflags='-s -w' -o _build/ups-pi-node-helper-go ./cmd/ups-pi-node-helper-go
+	$(GO_BUILD) $(GO_ARCH) go build -mod=vendor -buildvcs=false -trimpath -ldflags='-s -w' -o _build/ups-pi-node-web-go ./cmd/ups-pi-node-web-go
+	$(GO_BUILD) $(GO_ARCH) go build -mod=vendor -buildvcs=false -trimpath -ldflags='-s -w' -o _build/ups-pi-node-runtime ./cmd/ups-pi-node-runtime
 
 override_dh_auto_install:
 	# Files are installed through debian/install.
 
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -f _build/ups-pi-node-helper-go _build/ups-pi-node-web-go _build/ups-pi-node-runtime
+	test ! -d _build || rmdir --ignore-fail-on-non-empty _build
+
+override_dh_dwz:
+	# Go binaries are built without DWARF data and need no multifile rewrite.
+
+override_dh_strip:
+	# The static Go binaries are already stripped with -ldflags='-s -w'.
+
+override_dh_makeshlibs:
+	# Static Go binaries do not provide ELF shared libraries.
+
+override_dh_shlibdeps:
+	# Static Go binaries have no dynamic shared-library dependencies.
+
 override_dh_fixperms:
 	dh_fixperms
-	find debian/ups-pi-node/usr/lib/ups-pi-node -type f -exec chmod 0644 {} +
+	find debian/ups-pi-node/usr/lib/ups-pi-node -type f ! -path '*/bin/*' -exec chmod 0644 {} +
+	chmod 0755 debian/ups-pi-node/usr/lib/ups-pi-node/bin/ups-pi-node-helper-go
+	chmod 0755 debian/ups-pi-node/usr/lib/ups-pi-node/bin/ups-pi-node-web-go
+	chmod 0755 debian/ups-pi-node/usr/sbin/ups-pi-node-runtime
 	chmod +x debian/ups-pi-node/usr/bin/ups-pi-node-hotspot-fallback
 	chmod +x debian/ups-pi-node/usr/bin/ups-pi-node-enable-buses

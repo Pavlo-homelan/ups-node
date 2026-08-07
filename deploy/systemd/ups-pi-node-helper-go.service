@@ -1,0 +1,44 @@
+[Unit]
+Description=ups-pi-node Go system helper
+Documentation=file:/usr/share/doc/ups-pi-node/go-migration.md
+After=NetworkManager.service dbus.service
+Wants=NetworkManager.service dbus.service
+Conflicts=ups-pi-node-helper.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0007
+RuntimeDirectory=ups-pi-node
+RuntimeDirectoryMode=0755
+ExecStart=/usr/lib/ups-pi-node/bin/ups-pi-node-helper-go --socket /run/ups-pi-node/helper.sock --socket-group www-data --config /etc/ups-pi-node/main.conf --hardware=true --pamtester /usr/bin/pamtester --pam-service ups-pi-node
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=5s
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_CHOWN
+PrivateTmp=yes
+PrivateDevices=no
+DevicePolicy=closed
+DeviceAllow=/dev/i2c-1 rw
+DeviceAllow=/dev/gpiochip0 rw
+DeviceAllow=/dev/spidev0.0 rw
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/run/ups-pi-node
+
+[Install]
+WantedBy=multi-user.target
