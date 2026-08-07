@@ -1,0 +1,141 @@
+{{define "dashboard.html"}}<!doctype html>
+<html lang="{{.Language}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="csrf-token" content="{{.CSRF}}">
+  <title>{{.NodeID}} · Dashboard</title>
+  <link rel="stylesheet" href="/assets/css/app.css">
+  <script src="/assets/js/dashboard.js" defer></script>
+</head>
+<body class="dashboard-page">
+  <div id="initial-status" hidden>{{.InitialStatus}}</div>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="/dashboard" aria-label="Dashboard {{.NodeID}}">
+      <span class="brand-mark compact" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span><strong>{{.NodeID}}</strong></span>
+    </a>
+    <div class="topbar-actions">
+      <button class="ghost-button" id="open-network" type="button">Мережа</button>
+      <span class="user-chip">{{.Username}}</span>
+      <form method="post" action="/logout">
+        <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+        <button class="icon-button" type="submit" aria-label="Вийти">↗</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="dashboard-shell">
+    <section class="status-row" aria-label="Стан системи">
+      <span class="state-pill" id="ups-state">INIT</span>
+      <p class="status-summary" id="system-summary">Очікування телеметрії…</p>
+      <div class="live-state" id="connection-state" data-state="connecting">
+        <span class="live-dot"></span>
+        <span id="connection-label">Підключення</span>
+        <time id="updated-time">--:--:--</time>
+      </div>
+    </section>
+
+    <section class="power-map card" id="power-map" aria-label="Схема живлення">
+      <svg class="flow-diagram" viewBox="0 0 820 250" role="img" aria-labelledby="flow-title flow-desc">
+        <title id="flow-title">Схема живлення</title>
+        <desc id="flow-desc">Мережа 220 В, UPS, акумулятор і вихід 19 В</desc>
+        <defs>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+        </defs>
+        <path class="flow-track" d="M134 74 H352"></path>
+        <path class="flow-line flow-mains" d="M134 74 H352"></path>
+        <path class="flow-track" d="M468 74 H686"></path>
+        <path class="flow-line flow-load" d="M468 74 H686"></path>
+        <path class="flow-track" d="M410 123 V191"></path>
+        <path class="flow-line flow-battery" d="M410 123 V191"></path>
+        <g class="flow-node mains-node" transform="translate(28 34)">
+          <rect width="106" height="80" rx="22"></rect><text x="53" y="34">220 В</text><text class="node-meta" x="53" y="57" id="flow-mains-label">--</text>
+        </g>
+        <g class="flow-node ups-node" transform="translate(352 34)">
+          <rect width="116" height="90" rx="26"></rect><text x="58" y="38">UPS</text><text class="node-meta" x="58" y="64" id="flow-ups-label">--</text>
+        </g>
+        <g class="flow-node load-node" transform="translate(686 34)">
+          <rect width="106" height="80" rx="22"></rect><text x="53" y="34">19 В</text><text class="node-meta" x="53" y="57">CH2 OUT</text>
+        </g>
+        <g class="flow-node battery-node" transform="translate(352 191)">
+          <rect width="116" height="54" rx="18"></rect><text x="58" y="24">BATTERY</text><text class="node-meta" x="58" y="42" id="flow-battery-label">--</text>
+        </g>
+      </svg>
+    </section>
+
+    <section class="metrics-grid" aria-label="Електричні вимірювання">
+      <article class="metric-card battery-card card">
+        <div class="card-heading compact-heading">
+          <h2>Акумулятор</h2>
+          <span class="status-badge" id="battery-status">--</span>
+        </div>
+        <div class="battery-layout">
+          <div class="battery-visual" role="img" aria-label="Рівень заряду акумулятора">
+            <div class="battery-cap"></div>
+            <div class="battery-body"><div class="battery-fill" id="battery-fill"><span></span></div></div>
+            <strong id="battery-percent">--%</strong>
+          </div>
+          <div class="metric-values">
+            <div><span>Напруга батареї</span><strong data-number="v">--</strong><em>V</em></div>
+            <div><span>Струм батареї</span><strong data-number="current_ma">--</strong><em>mA</em></div>
+            <div><span>Потужність батареї</span><strong data-number="power_w">--</strong><em>W</em></div>
+          </div>
+        </div>
+        <svg class="sparkline" viewBox="0 0 400 72" preserveAspectRatio="none" aria-label="Історія напруги батареї"><polyline id="battery-history" points=""></polyline></svg>
+      </article>
+
+      <article class="metric-card output-card card">
+        <div class="card-heading compact-heading">
+          <h2>Вихід 19 В</h2>
+          <span class="output-pulse" aria-hidden="true"></span>
+        </div>
+        <div class="output-orb" aria-hidden="true"><span>19V</span></div>
+        <div class="metric-values output-values">
+          <div><span>Напруга виходу</span><strong data-number="output_v">--</strong><em>V</em></div>
+          <div><span>Струм навантаження</span><strong data-number="output_i">--</strong><em>mA</em></div>
+          <div><span>Потужність навантаження</span><strong data-number="output_w">--</strong><em>W</em></div>
+        </div>
+        <svg class="sparkline output-spark" viewBox="0 0 400 72" preserveAspectRatio="none" aria-label="Історія струму виходу"><polyline id="output-history" points=""></polyline></svg>
+      </article>
+    </section>
+
+    <section class="secondary-grid" aria-label="Система і мережа">
+      <article class="card compact-card">
+        <div class="card-heading compact-heading"><h2>Система</h2></div>
+        <div class="system-metrics">
+          <div><span>CPU</span><strong data-number="cpu_temp">--</strong><em>°C</em></div>
+          <div><span>RAM</span><strong data-number="ram_percent">--</strong><em>%</em></div>
+          <div><span>Використано</span><strong data-number="ram_used">--</strong><em>MB</em></div>
+        </div>
+      </article>
+      <article class="card compact-card network-card">
+        <div class="card-heading compact-heading"><h2>Wi‑Fi</h2><span class="wifi-waves" aria-hidden="true"><i></i><i></i><i></i></span></div>
+        <dl class="network-details">
+          <div><dt>Мережа</dt><dd id="wifi-ssid">--</dd></div>
+          <div><dt>Адреса</dt><dd id="wifi-ip">--</dd></div>
+          <div><dt>Режим</dt><dd id="wifi-mode">--</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <p class="diagnostic-error" id="diagnostic-error" role="status" hidden></p>
+  </main>
+
+  <dialog class="network-dialog" id="network-dialog">
+    <form method="dialog" class="dialog-heading"><h2>Wi‑Fi</h2><button class="icon-button" value="cancel" aria-label="Закрити">×</button></form>
+    <button class="secondary-button" id="scan-network" type="button">Сканувати мережі</button>
+    <div class="network-list" id="network-list" aria-live="polite"></div>
+    <form class="connect-form" id="connect-form">
+      <label><span>SSID</span><input id="connect-ssid" maxlength="256" required></label>
+      <label><span>Пароль</span><input id="connect-password" type="password" maxlength="4096" autocomplete="new-password"></label>
+      <label class="check-label"><input id="connect-hidden" type="checkbox"><span>Прихована мережа</span></label>
+      <button class="primary-button" type="submit">Підключити</button>
+      <p class="form-message" id="network-message" role="status"></p>
+    </form>
+  </dialog>
+</body>
+</html>{{end}}
