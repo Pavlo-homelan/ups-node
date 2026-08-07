@@ -88,7 +88,13 @@ func run() error {
 	case <-ctx.Done():
 		shutdownContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return httpServer.Shutdown(shutdownContext)
+		if err := httpServer.Shutdown(shutdownContext); err != nil {
+			logger.Warn("Go web service graceful shutdown timed out", "error", err)
+			if closeErr := httpServer.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+				return closeErr
+			}
+		}
+		return nil
 	case err := <-serveErrors:
 		if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) {
 			return nil
