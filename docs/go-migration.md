@@ -86,10 +86,11 @@ per Wi-Fi device and are idempotent.
 | Device unavailable/disabled | Report state; do not force activation |
 
 For a requested SSID, the helper updates or reuses one canonical managed
-profile. Re-entering a password must not create duplicate profiles. Existing
-profiles not owned by `ups-pi-node` are never deleted automatically. A manual
-connect operation suppresses fallback activation until that transition reaches
-a terminal state or times out.
+profile. Re-entering a password must not create duplicate profiles. Same-SSID
+duplicate profiles created by earlier helpers may be deleted after the
+canonical profile exists; unrelated profiles are left alone. A manual connect
+operation suppresses fallback activation until that transition reaches a
+terminal state or times out.
 
 Client Wi-Fi profiles disable IPv6 by default (`ipv6.method=ignore` in
 NetworkManager). The Go web service reads `[wifi] ipv6 = disabled|auto` or
@@ -169,7 +170,7 @@ available through the Go service or intentionally removed from both runtimes:
 ## Non-goals for the first phase
 
 - Replacing all Python code in one release.
-- Deleting user-created NetworkManager profiles.
+- Deleting unrelated NetworkManager profiles.
 - Moving animation rendering into the Raspberry Pi backend.
 - Changing the verified INA3221, GPIO, or ST7735 wiring.
 

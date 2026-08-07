@@ -37,6 +37,12 @@ func TestConnectionSettingsDisableIPv6ByDefault(t *testing.T) {
 	if actual := variantString(settings["ipv6"]["method"]); actual != "ignore" {
 		t.Fatalf("ipv6.method = %q, want ignore", actual)
 	}
+	if actual := settings["connection"]["autoconnect-priority"].Value(); actual != managedAutoconnectPriority {
+		t.Fatalf("autoconnect-priority = %#v, want %d", actual, managedAutoconnectPriority)
+	}
+	if actual := settings["802-11-wireless"]["powersave"].Value(); actual != networkManagerPowerSaveDisable {
+		t.Fatalf("powersave = %#v, want %d", actual, networkManagerPowerSaveDisable)
+	}
 	if _, exists := settings["ipv6"]["addresses"]; exists {
 		t.Fatal("ipv6.addresses must not be emitted for automatic profiles")
 	}

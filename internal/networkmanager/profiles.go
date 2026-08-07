@@ -5,13 +5,18 @@ import (
 	"crypto/rand"
 	"crypto/sha1" // Compatibility with profile names created by the Python helper.
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/godbus/dbus/v5"
 )
 
-const settingsToDisk uint32 = 0x1
+const (
+	settingsToDisk                 uint32 = 0x1
+	managedAutoconnectPriority     int32  = 100
+	networkManagerPowerSaveDisable uint32 = 2
+)
 
 type connectionSettings map[string]map[string]dbus.Variant
 
@@ -32,7 +37,7 @@ func (client *Client) Connect(
 	}
 
 	connectionID := managedConnectionName(ssid)
-	profilePath, existing, err := client.findConnection(ctx, connectionID)
+	profilePath, existing, duplicates, err := client.findConnection(ctx, interfaceName, connectionID, ssid)
 	if err != nil {
 		return ConnectResult{}, err
 	}
@@ -54,6 +59,11 @@ func (client *Client) Connect(
 			return ConnectResult{}, err
 		}
 	}
+	for _, duplicatePath := range duplicates {
+		if err := client.deleteConnection(ctx, duplicatePath); err != nil {
+			return ConnectResult{}, err
+		}
+	}
 
 	if _, err := client.activate(ctx, profilePath, devicePath); err != nil {
 		return ConnectResult{}, err
@@ -65,15 +75,20 @@ func (client *Client) Connect(
 
 func (client *Client) findConnection(
 	ctx context.Context,
+	interfaceName string,
 	connectionID string,
-) (dbus.ObjectPath, connectionSettings, error) {
+	ssid string,
+) (dbus.ObjectPath, connectionSettings, []dbus.ObjectPath, error) {
 	var paths []dbus.ObjectPath
 	err := client.bus.Object(busName, settingsPath).
 		CallWithContext(ctx, settingsInterface+".ListConnections", 0).
 		Store(&paths)
 	if err != nil {
-		return "", nil, fmt.Errorf("list NetworkManager profiles: %w", err)
+		return "", nil, nil, fmt.Errorf("list NetworkManager profiles: %w", err)
 	}
+	var managedPath dbus.ObjectPath
+	var managedSettings connectionSettings
+	duplicates := []dbus.ObjectPath{}
 	for _, path := range paths {
 		settings, readErr := client.getSettings(ctx, path)
 		if readErr != nil {
@@ -82,10 +97,15 @@ func (client *Client) findConnection(
 		connection := settings["connection"]
 		if variantString(connection["id"]) == connectionID &&
 			variantString(connection["type"]) == "802-11-wireless" {
-			return path, settings, nil
+			managedPath = path
+			managedSettings = settings
+			continue
+		}
+		if isDuplicateWiFiProfile(settings, interfaceName, ssid) {
+			duplicates = append(duplicates, path)
 		}
 	}
-	return "", nil, nil
+	return managedPath, managedSettings, duplicates, nil
 }
 
 func (client *Client) getSettings(
@@ -146,6 +166,16 @@ func (client *Client) updateConnection(
 	return nil
 }
 
+func (client *Client) deleteConnection(ctx context.Context, path dbus.ObjectPath) error {
+	err := client.bus.Object(busName, path).
+		CallWithContext(ctx, connectionInterface+".Delete", 0).
+		Err
+	if err != nil {
+		return fmt.Errorf("delete duplicate NetworkManager profile: %w", err)
+	}
+	return nil
+}
+
 func buildConnectionSettings(
 	interfaceName string,
 	connectionID string,
@@ -164,16 +194,18 @@ func buildConnectionSettings(
 	}
 	settings := connectionSettings{
 		"connection": {
-			"id":             dbus.MakeVariant(connectionID),
-			"uuid":           dbus.MakeVariant(uuid),
-			"type":           dbus.MakeVariant("802-11-wireless"),
-			"interface-name": dbus.MakeVariant(interfaceName),
-			"autoconnect":    dbus.MakeVariant(true),
+			"id":                   dbus.MakeVariant(connectionID),
+			"uuid":                 dbus.MakeVariant(uuid),
+			"type":                 dbus.MakeVariant("802-11-wireless"),
+			"interface-name":       dbus.MakeVariant(interfaceName),
+			"autoconnect":          dbus.MakeVariant(true),
+			"autoconnect-priority": dbus.MakeVariant(managedAutoconnectPriority),
 		},
 		"802-11-wireless": {
-			"ssid":   dbus.MakeVariant([]byte(ssid)),
-			"mode":   dbus.MakeVariant("infrastructure"),
-			"hidden": dbus.MakeVariant(hidden),
+			"ssid":      dbus.MakeVariant([]byte(ssid)),
+			"mode":      dbus.MakeVariant("infrastructure"),
+			"hidden":    dbus.MakeVariant(hidden),
+			"powersave": dbus.MakeVariant(networkManagerPowerSaveDisable),
 		},
 		"ipv4": {"method": dbus.MakeVariant("auto")},
 		"ipv6": {"method": dbus.MakeVariant(ipv6Method)},
@@ -204,6 +236,7 @@ func updateConnectionSettings(
 	settings["connection"]["type"] = dbus.MakeVariant("802-11-wireless")
 	settings["connection"]["interface-name"] = dbus.MakeVariant(interfaceName)
 	settings["connection"]["autoconnect"] = dbus.MakeVariant(true)
+	settings["connection"]["autoconnect-priority"] = dbus.MakeVariant(managedAutoconnectPriority)
 
 	if settings["802-11-wireless"] == nil {
 		settings["802-11-wireless"] = make(map[string]dbus.Variant)
@@ -211,6 +244,7 @@ func updateConnectionSettings(
 	settings["802-11-wireless"]["ssid"] = dbus.MakeVariant([]byte(ssid))
 	settings["802-11-wireless"]["mode"] = dbus.MakeVariant("infrastructure")
 	settings["802-11-wireless"]["hidden"] = dbus.MakeVariant(hidden)
+	settings["802-11-wireless"]["powersave"] = dbus.MakeVariant(networkManagerPowerSaveDisable)
 	if password != "" {
 		settings["802-11-wireless-security"] = securitySettings(password)
 	}
@@ -235,6 +269,19 @@ func networkManagerIPv6Method(mode string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported Wi-Fi IPv6 mode %q", mode)
 	}
+}
+
+func isDuplicateWiFiProfile(settings connectionSettings, interfaceName string, ssid string) bool {
+	connection := settings["connection"]
+	wireless := settings["802-11-wireless"]
+	if variantString(connection["type"]) != "802-11-wireless" {
+		return false
+	}
+	profileInterface := variantString(connection["interface-name"])
+	if profileInterface != "" && profileInterface != interfaceName {
+		return false
+	}
+	return slices.Equal(variantBytes(wireless["ssid"]), []byte(ssid))
 }
 
 func managedConnectionName(ssid string) string {
@@ -277,5 +324,10 @@ func randomUUID() (string, error) {
 
 func variantString(variant dbus.Variant) string {
 	value, _ := variant.Value().(string)
+	return value
+}
+
+func variantBytes(variant dbus.Variant) []byte {
+	value, _ := variant.Value().([]byte)
 	return value
 }

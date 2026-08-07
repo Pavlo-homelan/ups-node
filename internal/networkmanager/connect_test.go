@@ -61,6 +61,12 @@ func TestConnectUpdatesCanonicalProfileWithoutCreatingDuplicate(t *testing.T) {
 	if actual := variantString(updated["ipv6"]["method"]); actual != "ignore" {
 		t.Fatalf("updated ipv6.method = %q", actual)
 	}
+	if actual := updated["connection"]["autoconnect-priority"].Value(); actual != managedAutoconnectPriority {
+		t.Fatalf("updated autoconnect-priority = %#v", actual)
+	}
+	if actual := updated["802-11-wireless"]["powersave"].Value(); actual != networkManagerPowerSaveDisable {
+		t.Fatalf("updated powersave = %#v", actual)
+	}
 	if _, exists := updated["ipv6"]["addresses"]; exists {
 		t.Fatal("legacy ipv6.addresses was sent back to NetworkManager")
 	}
@@ -105,6 +111,72 @@ func TestConnectCreatesOnlyCanonicalProfileWhenMissing(t *testing.T) {
 	}
 	if addCalls != 1 {
 		t.Fatalf("AddConnection2 calls = %d, want 1", addCalls)
+	}
+}
+
+func TestConnectDeletesDuplicateSameSSIDProfiles(t *testing.T) {
+	canonicalPath := dbus.ObjectPath("/profiles/canonical")
+	duplicatePath := dbus.ObjectPath("/profiles/duplicate")
+	otherPath := dbus.ObjectPath("/profiles/other")
+	devicePath := dbus.ObjectPath("/devices/wlan0")
+	activePath := dbus.ObjectPath("/active/1")
+
+	canonical, err := buildConnectionSettings(
+		"wlan0",
+		managedConnectionName("MyRouter"),
+		"MyRouter",
+		"secret",
+		false,
+		"disabled",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err := buildConnectionSettings("wlan0", "MyRouter", "MyRouter", "secret", false, "disabled")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := buildConnectionSettings("wlan0", "Office", "Office", "secret", false, "disabled")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleted := []dbus.ObjectPath{}
+	bus := fakeBus{call: func(path dbus.ObjectPath, method string, args ...any) *dbus.Call {
+		switch method {
+		case managerInterface + ".GetDeviceByIpIface":
+			return successfulCall(devicePath)
+		case settingsInterface + ".ListConnections":
+			return successfulCall([]dbus.ObjectPath{canonicalPath, duplicatePath, otherPath})
+		case connectionInterface + ".GetSettings":
+			switch path {
+			case canonicalPath:
+				return successfulCall(canonical)
+			case duplicatePath:
+				return successfulCall(duplicate)
+			case otherPath:
+				return successfulCall(other)
+			default:
+				return failedCall(errors.New("unexpected profile path"))
+			}
+		case connectionInterface + ".Update2":
+			return successfulCall(map[string]dbus.Variant{})
+		case connectionInterface + ".Delete":
+			deleted = append(deleted, path)
+			return successfulCall()
+		case managerInterface + ".ActivateConnection":
+			return successfulCall(activePath)
+		default:
+			return failedCall(errors.New("unexpected D-Bus method: " + method))
+		}
+	}}
+	client := &Client{bus: bus}
+
+	if _, err := client.Connect(context.Background(), "wlan0", "MyRouter", "", false, "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 1 || deleted[0] != duplicatePath {
+		t.Fatalf("deleted profiles = %#v, want only %s", deleted, duplicatePath)
 	}
 }
 
