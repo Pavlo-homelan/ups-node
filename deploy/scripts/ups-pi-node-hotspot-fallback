@@ -4,6 +4,7 @@ set -euo pipefail
 WIFI_IFACE="${UPS_PI_NODE_WIFI_INTERFACE:-wlan0}"
 HOTSPOT_CONNECTION="${UPS_PI_NODE_HOTSPOT_CONNECTION_NAME:-ups-pi-node-hotspot}"
 CONFIG_FILE="${UPS_PI_NODE_CONFIG_FILE:-/etc/ups-pi-node/main.conf}"
+NMCLI="${UPS_PI_NODE_NMCLI:-$(command -v nmcli || true)}"
 
 read_ini_value() {
     local file="$1"
@@ -35,25 +36,33 @@ CONFIG_HOTSPOT_PASSWORD="$(read_ini_value "$CONFIG_FILE" wifi hotspot_password)"
 HOTSPOT_SSID="${CONFIG_HOTSPOT_SSID:-${UPS_PI_NODE_HOTSPOT_SSID:-Ups-Node}}"
 HOTSPOT_PASSWORD="${CONFIG_HOTSPOT_PASSWORD:-${UPS_PI_NODE_HOTSPOT_PASSWORD:-12345678}}"
 
-if ! command -v nmcli >/dev/null 2>&1; then
+if [[ -z "$NMCLI" || ! -x "$NMCLI" ]]; then
     echo "nmcli is required for fallback hotspot management" >&2
     exit 1
 fi
 
-device_line="$(nmcli -t -f DEVICE,STATE,CONNECTION dev status | awk -F: -v iface="$WIFI_IFACE" '$1 == iface {print; exit}')"
+device_line="$("$NMCLI" -t -f DEVICE,STATE,CONNECTION dev status | awk -F: -v iface="$WIFI_IFACE" '$1 == iface {print; exit}')"
 device_state="$(printf '%s' "$device_line" | cut -d: -f2)"
 active_connection="$(printf '%s' "$device_line" | cut -d: -f3-)"
 
-if [[ "$device_state" == "connected" && "$active_connection" != "$HOTSPOT_CONNECTION" ]]; then
-    nmcli connection down "$HOTSPOT_CONNECTION" >/dev/null 2>&1 || true
+# An active client or hotspot connection is already the desired stable state.
+# Re-activating the hotspot here disconnects every portal client on each timer
+# tick. A connection attempt must also be allowed to finish without the
+# fallback job racing it.
+if [[ "$device_state" == "connected" || "$device_state" == "connecting" ]]; then
     exit 0
 fi
 
-if ! nmcli connection show "$HOTSPOT_CONNECTION" >/dev/null 2>&1; then
-    nmcli connection add type wifi ifname "$WIFI_IFACE" con-name "$HOTSPOT_CONNECTION" autoconnect no ssid "$HOTSPOT_SSID"
+if [[ "$device_state" != "disconnected" ]]; then
+    echo "Wi-Fi interface '$WIFI_IFACE' is not ready for hotspot fallback (state: ${device_state:-unknown})" >&2
+    exit 1
 fi
 
-nmcli connection modify "$HOTSPOT_CONNECTION" \
+if ! "$NMCLI" connection show "$HOTSPOT_CONNECTION" >/dev/null 2>&1; then
+    "$NMCLI" connection add type wifi ifname "$WIFI_IFACE" con-name "$HOTSPOT_CONNECTION" autoconnect no ssid "$HOTSPOT_SSID"
+fi
+
+"$NMCLI" connection modify "$HOTSPOT_CONNECTION" \
     802-11-wireless.ssid "$HOTSPOT_SSID" \
     802-11-wireless.mode ap \
     802-11-wireless.band bg \
@@ -62,4 +71,4 @@ nmcli connection modify "$HOTSPOT_CONNECTION" \
     wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk "$HOTSPOT_PASSWORD"
 
-nmcli connection up "$HOTSPOT_CONNECTION"
+"$NMCLI" connection up "$HOTSPOT_CONNECTION"
