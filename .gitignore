@@ -32,3 +32,4 @@ debian/ups-pi-node/
 
 # Imported SD-card/reference dumps
 incoming-rpi-ups-version/
+.aider*
