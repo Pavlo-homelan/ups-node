@@ -1,19 +1,8 @@
 {{define "dashboard.html"}}<!doctype html>
 <html lang="{{.Language}}">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="dark">
-  <meta name="csrf-token" content="{{.CSRF}}">
+  {{template "app_head" .}}
   <title>{{.NodeID}} · Dashboard</title>
-  <script>
-  try {
-    document.documentElement.dataset.theme = localStorage.getItem("ups-pi-node-theme") || "dark";
-  } catch (error) {
-    document.documentElement.dataset.theme = "dark";
-  }
-  </script>
-  <link rel="stylesheet" href="/assets/css/app.css">
   <script src="/assets/js/dashboard.js" defer></script>
 </head>
 <body class="dashboard-page">

@@ -233,6 +233,10 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	if recorder.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("security headers are missing")
 	}
+	if !strings.Contains(body, `src="/assets/js/theme-init.js"`) ||
+		strings.Contains(body, `localStorage.getItem("ups-pi-node-theme")`) {
+		t.Fatal("dashboard theme must be initialized by an external CSP-compatible script")
+	}
 
 	request = httptest.NewRequest(http.MethodPost, "/api/v1/wifi/scan", nil)
 	request.AddCookie(session)

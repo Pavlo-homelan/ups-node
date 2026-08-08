@@ -2,15 +2,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{.CSRF}}">
-<script>
-try {
-  document.documentElement.dataset.theme = localStorage.getItem("ups-pi-node-theme") || "dark";
-  document.documentElement.dataset.widgetStyle = localStorage.getItem("ups-pi-node-widget-style") || "neon";
-} catch (error) {
-  document.documentElement.dataset.theme = "dark";
-  document.documentElement.dataset.widgetStyle = "neon";
-}
-</script>
+<meta name="color-scheme" content="dark light">
+<script src="/assets/js/theme-init.js"></script>
 <link rel="stylesheet" href="/assets/css/app.css">
 {{end}}
 
