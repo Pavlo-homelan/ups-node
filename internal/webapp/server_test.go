@@ -173,6 +173,18 @@ func widgetUploadBody(t *testing.T, csrf string) (*bytes.Reader, string) {
 	return bytes.NewReader(body.Bytes()), writer.FormDataContentType()
 }
 
+func helperActionCount(helper *fakeHelper, action string) int {
+	helper.mu.Lock()
+	defer helper.mu.Unlock()
+	count := 0
+	for _, call := range helper.calls {
+		if call.action == action {
+			count++
+		}
+	}
+	return count
+}
+
 func TestProtectedDashboardAndAPIRequireSignedSession(t *testing.T) {
 	server, _ := testServer(t)
 	request := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
@@ -200,8 +212,8 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	server.Handler().ServeHTTP(recorder, request)
 	body := recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(body, `href="/wifi"`) ||
-		!strings.Contains(body, `href="/system"`) || !strings.Contains(body, "Живлення") ||
-		!strings.Contains(body, "Батарея") {
+		!strings.Contains(body, `href="/system"`) || !strings.Contains(body, "Акумулятор") ||
+		!strings.Contains(body, "Вихід 19 В") {
 		t.Fatalf("dashboard response = %d", recorder.Code)
 	}
 	for _, phrase := range []string{
@@ -239,6 +251,35 @@ func TestLoginDashboardAndCSRFProtectedMutation(t *testing.T) {
 	server.Handler().ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "MyRouter") {
 		t.Fatalf("CSRF mutation response = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestWiFiPageScansOnlyWhenRequested(t *testing.T) {
+	server, helper := testServer(t)
+	session, csrfCookie := loginSession(t, server)
+
+	request := httptest.NewRequest(http.MethodGet, "/wifi", nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("wifi response = %d", recorder.Code)
+	}
+	if helperActionCount(helper, "wifi.scan") != 0 {
+		t.Fatal("plain /wifi triggered a Wi-Fi scan")
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/wifi?scan=1", nil)
+	request.AddCookie(session)
+	request.AddCookie(csrfCookie)
+	recorder = httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "MyRouter") {
+		t.Fatalf("wifi scan response = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if helperActionCount(helper, "wifi.scan") != 1 {
+		t.Fatalf("wifi.scan count = %d, want 1", helperActionCount(helper, "wifi.scan"))
 	}
 }
 
@@ -310,17 +351,16 @@ func TestDashboardWidgetManagerRoutesPersistLayout(t *testing.T) {
 	session, csrfCookie := loginSession(t, server)
 
 	postForm(t, server, session, csrfCookie, "/system/dashboard-widgets/cpu-temp/add", nil)
-	request := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
-	request.AddCookie(session)
-	request.AddCookie(csrfCookie)
-	recorder := httptest.NewRecorder()
-	server.Handler().ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "Температура CPU") {
-		t.Fatalf("dashboard after add = %d %s", recorder.Code, recorder.Body.String())
+	contents, err := os.ReadFile(server.configSnapshot().DashboardWidgets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), "ups-main") || !strings.Contains(string(contents), "cpu-temp") {
+		t.Fatalf("layout file after add = %s", contents)
 	}
 
 	postForm(t, server, session, csrfCookie, "/system/dashboard-widgets/ups-main/remove", nil)
-	contents, err := os.ReadFile(server.configSnapshot().DashboardWidgets)
+	contents, err = os.ReadFile(server.configSnapshot().DashboardWidgets)
 	if err != nil {
 		t.Fatal(err)
 	}

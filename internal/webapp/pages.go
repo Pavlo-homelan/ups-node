@@ -213,11 +213,13 @@ func (server *Server) handleWiFiPage(w http.ResponseWriter, r *http.Request) {
 	}
 	status, _ := server.hub.Current()
 	data.PortalStatus = portalStatus(status, server.configSnapshot(), data.Language)
-	scan, err := server.scanNetworks(r.Context())
-	if err != nil {
-		data.Flash = append(data.Flash, flashMessage{Kind: "error", Text: err.Error()})
+	if r.URL.Query().Get("scan") == "1" {
+		scan, err := server.scanNetworks(r.Context())
+		if err != nil {
+			data.Flash = append(data.Flash, flashMessage{Kind: "error", Text: err.Error()})
+		}
+		data.ScanResult = scan
 	}
-	data.ScanResult = scan
 	server.renderTemplate(w, "wifi.html", data)
 }
 

@@ -11,26 +11,25 @@ try {
   document.documentElement.dataset.widgetStyle = "neon";
 }
 </script>
-<link rel="stylesheet" href="/assets/css/flask.css">
+<link rel="stylesheet" href="/assets/css/app.css">
 {{end}}
 
 {{define "page_header"}}
-<header class="page-header">
-  <a class="page-brand" href="/dashboard">
-    <span class="page-brand-main">{{.NodeID}}</span>
+<header class="topbar">
+  <a class="brand" href="/dashboard" aria-label="Dashboard {{.NodeID}}">
+    <span class="brand-mark compact" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span><strong>{{.NodeID}}</strong></span>
   </a>
-  <div class="page-tabs">
-    <nav class="tabs" aria-label="Sections">
-      <a class="tab-link{{if eq .ActivePage "ups"}} active{{end}}" href="/dashboard">{{tr .Language "tab.ups"}}</a>
-      <a class="tab-link{{if eq .ActivePage "wifi"}} active{{end}}" href="/wifi">{{tr .Language "tab.wifi"}}</a>
-      <a class="tab-link{{if eq .ActivePage "system"}} active{{end}}" href="/system">{{tr .Language "tab.system"}}</a>
-    </nav>
-  </div>
-  <div class="header-actions">
-    <span class="header-user">{{.Username}}</span>
+  <nav class="top-tabs" aria-label="Sections">
+    <a class="top-tab{{if eq .ActivePage "ups"}} active{{end}}" href="/dashboard">{{tr .Language "tab.ups"}}</a>
+    <a class="top-tab{{if eq .ActivePage "wifi"}} active{{end}}" href="/wifi">{{tr .Language "tab.wifi"}}</a>
+    <a class="top-tab{{if eq .ActivePage "system"}} active{{end}}" href="/system">{{tr .Language "tab.system"}}</a>
+  </nav>
+  <div class="topbar-actions">
+    <span class="user-chip">{{.Username}}</span>
     <form method="post" action="/logout">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-      <button class="header-logout" type="submit">{{tr .Language "header.logout"}}</button>
+      <button class="icon-button" type="submit" aria-label="{{tr .Language "header.logout"}}">↗</button>
     </form>
   </div>
 </header>
@@ -38,7 +37,7 @@ try {
 
 {{define "flash_messages"}}
 {{range .Flash}}
-  <p class="{{if eq .Kind "error"}}error{{else}}form-message{{end}}">{{.Text}}</p>
+  <p class="flash-message{{if eq .Kind "error"}} error{{end}}">{{.Text}}</p>
 {{end}}
 {{end}}
 
@@ -48,5 +47,4 @@ try {
 <script type="application/json" id="widget-style-options">{{.WidgetStyleOptionsJSON}}</script>
 <script type="application/json" id="i18n-messages">{{.ClientI18NJSON}}</script>
 <script src="/assets/js/theme.js"></script>
-<script src="/assets/js/main.js"></script>
 {{end}}
