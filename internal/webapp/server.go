@@ -23,19 +23,20 @@ import (
 var webAssets embed.FS
 
 type Server struct {
-	config       Config
-	helper       helperclient.Caller
-	configMu     sync.RWMutex
-	security     *security
-	auth         authenticator
-	hub          *statusHub
-	widgets      widgetManager
-	dashboard    dashboardWidgetManager
-	templates    *template.Template
-	handler      http.Handler
-	loginLimiter *attemptWindow
-	streams      *streamLimiter
-	logger       *slog.Logger
+	config            Config
+	helper            helperclient.Caller
+	configMu          sync.RWMutex
+	security          *security
+	auth              authenticator
+	hub               *statusHub
+	widgets           widgetManager
+	dashboard         dashboardWidgetManager
+	templates         *template.Template
+	handler           http.Handler
+	loginLimiter      *attemptWindow
+	streams           *streamLimiter
+	providerGeneration string
+	logger            *slog.Logger
 }
 
 type pageData struct {
@@ -90,6 +91,10 @@ func NewServer(config Config, helper helperclient.Caller, logger *slog.Logger) (
 		dashboard: newDashboardWidgetManager(config.DashboardWidgets), templates: templates,
 		loginLimiter: newAttemptWindow(), streams: newStreamLimiter(16, 2), logger: logger,
 	}
+	server.providerGeneration, err = randomToken(18)
+	if err != nil {
+		return nil, fmt.Errorf("create Provider telemetry generation: %w", err)
+	}
 	handler, err := server.routes()
 	if err != nil {
 		return nil, err
@@ -138,6 +143,7 @@ func (server *Server) routes() (http.Handler, error) {
 	mux.HandleFunc("GET /api/integrations/zabbix/discovery", server.handleZabbixDiscovery)
 	mux.HandleFunc("GET /api/integrations/zabbix/{metric}", server.handleZabbixMetric)
 	mux.HandleFunc("GET /api/integrations/home-assistant", server.handleHomeAssistantDiscovery)
+	mux.HandleFunc("GET /api/provider/v1/telemetry", server.handleProviderTelemetry)
 	mux.HandleFunc("GET /health", server.requireAPI(server.handleAPIData))
 	mux.HandleFunc("GET /healthz", server.handleHealth)
 	return mux, nil

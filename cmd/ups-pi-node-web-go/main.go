@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,6 +49,13 @@ func run() error {
 	config.SessionSecret = []byte(os.Getenv("UPS_PI_NODE_SECRET_KEY"))
 	if token := os.Getenv("UPS_PI_NODE_INTEGRATIONS_TOKEN"); token != "" {
 		config.IntegrationsToken = token
+	}
+	if token := os.Getenv("UPS_PI_NODE_PROVIDER_TOKEN"); token != "" {
+		config.ProviderToken = token
+	} else if token, err := readCredential("provider-token"); err != nil {
+		return err
+	} else {
+		config.ProviderToken = token
 	}
 	if nodeID := os.Getenv("UPS_PI_NODE_NODE_ID"); nodeID != "" {
 		config.NodeID = nodeID
@@ -134,6 +143,30 @@ func run() error {
 		}
 		return err
 	}
+}
+
+func readCredential(name string) (string, error) {
+	directory := strings.TrimSpace(os.Getenv("CREDENTIALS_DIRECTORY"))
+	if directory == "" {
+		return "", nil
+	}
+	path := filepath.Join(directory, name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() < 32 || info.Size() > 1024 {
+		return "", errors.New("Provider telemetry credential is invalid")
+	}
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	value := strings.TrimSpace(string(payload))
+	if len(value) < 32 {
+		return "", errors.New("Provider telemetry credential is too short")
+	}
+	return value, nil
 }
 
 func firstNonEmpty(values ...string) string {

@@ -14,6 +14,7 @@ type Config struct {
 	NodeID            string
 	Language          string
 	IntegrationsToken string
+	ProviderToken      string
 	HelperSocket      string
 	WiFiInterface     string
 	HotspotConnection string
@@ -123,6 +124,9 @@ func (config Config) Validate() error {
 	}
 	if len(config.SessionSecret) < 32 {
 		return fmt.Errorf("UPS_PI_NODE_SECRET_KEY must contain at least 32 bytes")
+	}
+	if config.ProviderToken != "" && len(config.ProviderToken) < 32 {
+		return fmt.Errorf("Provider telemetry token must contain at least 32 bytes")
 	}
 	if config.SessionTTL <= 0 || config.StatusInterval < 500*time.Millisecond {
 		return fmt.Errorf("session and status durations are invalid")
