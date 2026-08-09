@@ -2,6 +2,11 @@ server {
     listen 80 default_server;
     server_name _;
 
+    # The Provider contract is never available through the ordinary node UI.
+    location = /api/provider/v1/telemetry {
+        return 404;
+    }
+
     location /static/ {
         alias /usr/lib/ups-pi-node/app/static/;
         expires 7d;
